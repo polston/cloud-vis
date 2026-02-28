@@ -36,7 +36,7 @@ function e(source: string, target: string, label?: string): CloudEdge {
     source,
     target,
     label,
-    type: 'smoothstep',
+    type: 'smartEdge',
     animated: false,
     style: { stroke: '#475569', strokeWidth: 1.5 },
   };
