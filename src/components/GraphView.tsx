@@ -21,6 +21,7 @@ import SmartEdge from './SmartEdge';
 import Breadcrumb from './Breadcrumb';
 import InfoPanel from './InfoPanel';
 import DepthControl from './DepthControl';
+import EdgeLegend from './EdgeLegend';
 import { useGraphNavigation, MAX_HIERARCHY_DEPTH } from '../hooks/useGraphNavigation';
 import { graphRegistry } from '../data/graph-data';
 import type { CloudNodeData, ZoneNodeData } from '../types';
@@ -195,26 +196,7 @@ export default function GraphView() {
         showDrillDown={viewMode === 'explorer'}
       />
 
-      {isZoneMode && (
-        <div className="graph-legend">
-          <div className="graph-legend-item">
-            <span className="legend-line" style={{ borderColor: '#475569' }} />
-            <span>Same-zone edge</span>
-          </div>
-          <div className="graph-legend-item">
-            <span className="legend-line legend-line-dashed" style={{ borderColor: '#F59E0B' }} />
-            <span>Cross-zone edge</span>
-          </div>
-          <div className="graph-legend-item">
-            <span className="legend-dot" style={{ borderColor: '#22C55E', background: 'rgba(34,197,94,0.2)' }} />
-            <span>Ingress point</span>
-          </div>
-          <div className="graph-legend-item">
-            <span className="legend-dot" style={{ borderColor: '#F97316', background: 'rgba(249,115,22,0.2)' }} />
-            <span>Egress point</span>
-          </div>
-        </div>
-      )}
+      <EdgeLegend isZoneMode={isZoneMode} />
 
       <div className="graph-hint">
         {isZoneMode
