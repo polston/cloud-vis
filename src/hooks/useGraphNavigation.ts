@@ -57,6 +57,14 @@ export function useGraphNavigation() {
   const [zoneDepth, setZoneDepth] = useState(MAX_HIERARCHY_DEPTH);
   const [collapsedZones, setCollapsedZones] = useState<Set<string>>(new Set());
 
+  // Lock states: zones locked by default, leaf nodes unlocked by default
+  const [zonesLocked, setZonesLocked] = useState(true);
+  const [nodesLocked, setNodesLocked] = useState(false);
+
+  // User-dragged node position overrides, persisted across layout changes
+  const nodePositionOverridesRef = useRef(new Map<string, { x: number; y: number }>());
+  const [positionResetVersion, setPositionResetVersion] = useState(0);
+
   // User-dragged edge midY overrides, persisted across navigation
   const edgeOverridesRef = useRef(new Map<string, number>());
   // Use a counter to trigger re-render when overrides change
@@ -89,8 +97,20 @@ export function useGraphNavigation() {
     const { nodes: flatNodes, edges: flatEdges } = flattenGraph(zoneDepth, collapsedZones);
     const layouted = getZoneLayoutedElements(flatNodes, flatEdges);
 
+    // Apply lock states and position overrides to nodes
+    const nodesWithLocks = layouted.nodes.map((node) => {
+      const isZone = node.type === 'zoneContainer';
+      const draggable = isZone ? !zonesLocked : !nodesLocked;
+      const posOverride = nodePositionOverridesRef.current.get(node.id);
+      return {
+        ...node,
+        draggable,
+        ...(posOverride ? { position: posOverride } : {}),
+      };
+    });
+
     // Apply semantic edge colors, then overlay cross-zone dashed indicator
-    const nodeParentMap = buildNodeParentMap(layouted.nodes);
+    const nodeParentMap = buildNodeParentMap(nodesWithLocks);
     const styledEdges = layouted.edges.map((edge) => {
       const styled = applyEdgeStyle(edge);
       if (isCrossZoneEdge(edge, nodeParentMap)) {
@@ -108,11 +128,11 @@ export function useGraphNavigation() {
     });
 
     return {
-      nodes: layouted.nodes,
+      nodes: nodesWithLocks,
       edges: applyEdgeOverrides(styledEdges, edgeOverridesRef.current),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, zoneDepth, collapsedZones, overrideVersion]);
+  }, [viewMode, zoneDepth, collapsedZones, overrideVersion, zonesLocked, nodesLocked, positionResetVersion]);
 
   const nodes = viewMode === 'zone' ? zoneData.nodes : explorerData.nodes;
   const edges = viewMode === 'zone' ? zoneData.edges : explorerData.edges;
@@ -157,6 +177,27 @@ export function useGraphNavigation() {
     setOverrideVersion((v) => v + 1);
   }, []);
 
+  const toggleZonesLocked = useCallback(() => {
+    setZonesLocked((prev) => !prev);
+  }, []);
+
+  const toggleNodesLocked = useCallback(() => {
+    setNodesLocked((prev) => !prev);
+  }, []);
+
+  /** Store a node's dragged position so it persists across layout recalculations */
+  const updateNodePosition = useCallback((nodeId: string, position: { x: number; y: number }) => {
+    nodePositionOverridesRef.current.set(nodeId, position);
+  }, []);
+
+  /** Clear all node position overrides, returning to auto-layout */
+  const resetPositions = useCallback(() => {
+    nodePositionOverridesRef.current.clear();
+    setPositionResetVersion((v) => v + 1);
+  }, []);
+
+  const hasPositionOverrides = nodePositionOverridesRef.current.size > 0;
+
   return {
     viewMode,
     currentLevel,
@@ -167,11 +208,18 @@ export function useGraphNavigation() {
     selectedNodeId,
     zoneDepth,
     collapsedZones,
+    zonesLocked,
+    nodesLocked,
+    hasPositionOverrides,
     navigateTo,
     selectNode,
     toggleZoneCollapse,
     toggleViewMode,
     setZoneDepth,
     updateEdgeMidY,
+    toggleZonesLocked,
+    toggleNodesLocked,
+    updateNodePosition,
+    resetPositions,
   };
 }

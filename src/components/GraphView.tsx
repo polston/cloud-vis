@@ -9,9 +9,10 @@ import {
   useEdgesState,
   useReactFlow,
   type NodeMouseHandler,
+  type OnNodeDrag,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Map, List } from 'lucide-react';
+import { Map, List, Lock, LockOpen, RotateCcw } from 'lucide-react';
 
 import CloudServiceNode from './CloudServiceNode';
 import CloudGroupNode from './CloudGroupNode';
@@ -46,11 +47,18 @@ export default function GraphView() {
     breadcrumb,
     selectedNodeId,
     zoneDepth,
+    zonesLocked,
+    nodesLocked,
+    hasPositionOverrides,
     navigateTo,
     selectNode,
     toggleZoneCollapse,
     toggleViewMode,
     setZoneDepth,
+    toggleZonesLocked,
+    toggleNodesLocked,
+    updateNodePosition,
+    resetPositions,
   } = useGraphNavigation();
 
   const { fitView } = useReactFlow();
@@ -167,6 +175,13 @@ export default function GraphView() {
     selectNode(null);
   }, [selectNode]);
 
+  const onNodeDragStop: OnNodeDrag = useCallback(
+    (_event, node) => {
+      updateNodePosition(node.id, node.position);
+    },
+    [updateNodePosition]
+  );
+
   const isZoneMode = viewMode === 'zone';
 
   return (
@@ -202,11 +217,42 @@ export default function GraphView() {
           <span>{isZoneMode ? 'Explorer' : 'Zones'}</span>
         </button>
         {isZoneMode && (
-          <DepthControl
-            depth={zoneDepth}
-            maxDepth={MAX_HIERARCHY_DEPTH}
-            onChange={setZoneDepth}
-          />
+          <>
+            <DepthControl
+              depth={zoneDepth}
+              maxDepth={MAX_HIERARCHY_DEPTH}
+              onChange={setZoneDepth}
+            />
+            <div className="toolbar-separator" />
+            <button
+              className={`lock-toggle-btn ${zonesLocked ? 'locked' : ''}`}
+              onClick={toggleZonesLocked}
+              title={zonesLocked ? 'Unlock zones (allow dragging)' : 'Lock zones in place'}
+              data-testid="zone-lock-toggle"
+            >
+              {zonesLocked ? <Lock size={12} /> : <LockOpen size={12} />}
+              <span>Zones</span>
+            </button>
+            <button
+              className={`lock-toggle-btn ${nodesLocked ? 'locked' : ''}`}
+              onClick={toggleNodesLocked}
+              title={nodesLocked ? 'Unlock nodes (allow dragging)' : 'Lock nodes in place'}
+              data-testid="node-lock-toggle"
+            >
+              {nodesLocked ? <Lock size={12} /> : <LockOpen size={12} />}
+              <span>Nodes</span>
+            </button>
+            {hasPositionOverrides && (
+              <button
+                className="reset-positions-btn"
+                onClick={resetPositions}
+                title="Reset all positions to auto-layout"
+                data-testid="reset-positions"
+              >
+                <RotateCcw size={12} />
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -218,6 +264,7 @@ export default function GraphView() {
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
+          onNodeDragStop={onNodeDragStop}
           onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
@@ -260,7 +307,7 @@ export default function GraphView() {
 
       <div className="graph-hint">
         {isZoneMode
-          ? 'Double-click zones to expand/collapse \u00b7 Drag edges to reposition \u00b7 Scroll or pinch to zoom'
+          ? 'Double-click zones to expand/collapse \u00b7 Unlock zones/nodes to drag \u00b7 Scroll or pinch to zoom'
           : 'Double-click a group to drill down \u00b7 Drag edges to reposition \u00b7 Pinch or scroll to zoom'}
       </div>
     </div>

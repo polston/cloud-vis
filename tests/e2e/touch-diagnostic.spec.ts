@@ -9,9 +9,10 @@ test.describe('Pinch-zoom fix verification', () => {
 
   test('multi-touch on node triggers d3-zoom and nopan is restored', async ({ page }) => {
     // Part 1: verify the fix works for zoom
+    // Target a draggable leaf node (not a zone container, which may be locked)
     const zoomResult = await page.evaluate(() => {
       const renderer = document.querySelector('.react-flow__renderer') as any;
-      const node = document.querySelector('.react-flow__node') as any;
+      const node = (document.querySelector('.react-flow__node:not(.react-flow__node-zoneContainer)') ?? document.querySelector('.react-flow__node')) as any;
       if (!renderer || !node) return { error: 'elements not found' };
 
       const rect = renderer.getBoundingClientRect();
@@ -67,7 +68,7 @@ test.describe('Pinch-zoom fix verification', () => {
     // Part 2: verify nopan was restored (setTimeout fires after evaluate returns)
     await page.waitForTimeout(50);
     const nopanRestored = await page.evaluate(() => {
-      const node = document.querySelector('.react-flow__node');
+      const node = document.querySelector('.react-flow__node:not(.react-flow__node-zoneContainer)') ?? document.querySelector('.react-flow__node');
       return node?.classList.contains('nopan') ?? false;
     });
     expect(nopanRestored).toBe(true);
