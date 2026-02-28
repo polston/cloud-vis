@@ -21,6 +21,8 @@ export interface CloudService {
   parentId?: string;
 }
 
+export type GatewayType = 'ingress' | 'egress' | 'both';
+
 export interface CloudNodeData {
   label: string;
   description: string;
@@ -32,11 +34,27 @@ export interface CloudNodeData {
   hasChildren: boolean;
   depth: number;
   color: string;
+  gatewayType?: GatewayType;
+  [key: string]: unknown;
+}
+
+export interface ZoneNodeData {
+  label: string;
+  description: string;
+  provider: CloudProvider;
+  category: string;
+  icon: string;
+  color: string;
+  zoneLevel: number;
+  isCollapsed: boolean;
+  childCount: number;
+  registryKey: string;
   [key: string]: unknown;
 }
 
 export type CloudNode = Node<CloudNodeData>;
 export type CloudEdge = Edge;
+export type ZoneNode = Node<ZoneNodeData>;
 
 export interface GraphLevel {
   id: string;

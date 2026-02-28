@@ -37,7 +37,13 @@ import {
   Gauge,
   LayoutDashboard,
   ArrowDownToLine,
+  ArrowLeftRight,
   PlayCircle,
+  Search,
+  Filter,
+  AlertCircle,
+  Clock,
+  MapPin,
   type LucideProps,
 } from 'lucide-react';
 import React from 'react';
@@ -81,7 +87,13 @@ const iconMap: Record<string, React.FC<LucideProps>> = {
   Gauge,
   LayoutDashboard,
   ArrowDownToLine,
+  ArrowLeftRight,
   PlayCircle,
+  Search,
+  Filter,
+  AlertCircle,
+  Clock,
+  MapPin,
 };
 
 export function getIcon(name: string, props?: LucideProps): React.ReactNode {

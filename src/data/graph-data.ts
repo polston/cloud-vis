@@ -1,4 +1,4 @@
-import type { CloudNode, CloudEdge } from '../types';
+import type { CloudNode, CloudEdge, GatewayType } from '../types';
 import { categoryColors } from './providers';
 
 // ─── Helper to build nodes ────────────────────────────────────────────
@@ -9,7 +9,7 @@ function n(
   provider: 'aws' | 'gcp' | 'azure',
   category: string,
   icon: string,
-  opts: { isGroup?: boolean; hasChildren?: boolean } = {}
+  opts: { isGroup?: boolean; hasChildren?: boolean; gatewayType?: GatewayType } = {}
 ): CloudNode {
   return {
     id,
@@ -26,6 +26,7 @@ function n(
       hasChildren: opts.hasChildren ?? false,
       depth: 0,
       color: categoryColors[category] ?? '#6B7280',
+      ...(opts.gatewayType ? { gatewayType: opts.gatewayType } : {}),
     },
   };
 }
@@ -65,8 +66,8 @@ export const awsNodes: CloudNode[] = [
   n('aws-rds', 'RDS', 'Relational Database Service', 'aws', 'database', 'Database', { isGroup: true, hasChildren: true }),
   n('aws-lambda', 'Lambda', 'Serverless Functions', 'aws', 'serverless', 'Zap', { isGroup: true, hasChildren: true }),
   n('aws-cloudwatch', 'CloudWatch', 'Monitoring & Observability', 'aws', 'monitoring', 'Activity', { isGroup: true, hasChildren: true }),
-  n('aws-route53', 'Route 53', 'DNS, domain registration & health checks', 'aws', 'networking', 'Globe', { isGroup: true, hasChildren: true }),
-  n('aws-elb', 'ELB', 'Elastic Load Balancing – distributes traffic', 'aws', 'networking', 'GitBranch', { isGroup: true, hasChildren: true }),
+  n('aws-route53', 'Route 53', 'DNS, domain registration & health checks', 'aws', 'networking', 'Globe', { isGroup: true, hasChildren: true, gatewayType: 'ingress' }),
+  n('aws-elb', 'ELB', 'Elastic Load Balancing – distributes traffic', 'aws', 'networking', 'GitBranch', { isGroup: true, hasChildren: true, gatewayType: 'ingress' }),
   n('aws-sqs', 'SQS', 'Fully managed message queuing', 'aws', 'messaging', 'Inbox', { isGroup: true, hasChildren: true }),
   n('aws-sns', 'SNS', 'Managed pub/sub messaging', 'aws', 'messaging', 'Bell', { isGroup: true, hasChildren: true }),
   n('aws-eventbridge', 'EventBridge', 'Serverless event bus', 'aws', 'messaging', 'Zap'),
@@ -163,7 +164,7 @@ export const eksWorkerEdges: CloudEdge[] = [
 export const eksNetworkingNodes: CloudNode[] = [
   n('net-vpc-cni', 'VPC CNI Plugin', 'Assigns VPC IPs to pods', 'aws', 'networking', 'Network'),
   n('net-coredns', 'CoreDNS', 'Cluster DNS for service discovery', 'aws', 'networking', 'Globe'),
-  n('net-ingress', 'AWS LB Controller', 'Routes external traffic via ALB/NLB', 'aws', 'networking', 'ArrowDownToLine'),
+  n('net-ingress', 'AWS LB Controller', 'Routes external traffic via ALB/NLB', 'aws', 'networking', 'ArrowDownToLine', { gatewayType: 'ingress' }),
   n('net-services', 'Services', 'ClusterIP, NodePort, LoadBalancer', 'aws', 'networking', 'GitBranch'),
   n('net-network-policy', 'Network Policies', 'Pod-to-pod traffic rules', 'aws', 'security', 'Shield'),
 ];
@@ -202,15 +203,15 @@ export const podEdges: CloudEdge[] = [
 // ═══════════════════════════════════════════════════════════════════════
 export const vpcNodes: CloudNode[] = [
   n('vpc-subnets', 'Subnets', 'Public & private IP ranges in single AZs', 'aws', 'networking', 'Layers'),
-  n('vpc-igw', 'Internet Gateway', 'Bidirectional VPC-to-internet access', 'aws', 'networking', 'Globe'),
-  n('vpc-nat', 'NAT Gateway', 'Outbound internet for private subnets', 'aws', 'networking', 'ArrowUpRight'),
+  n('vpc-igw', 'Internet Gateway', 'Bidirectional VPC-to-internet access', 'aws', 'networking', 'Globe', { gatewayType: 'both' }),
+  n('vpc-nat', 'NAT Gateway', 'Outbound internet for private subnets', 'aws', 'networking', 'ArrowUpRight', { gatewayType: 'egress' }),
   n('vpc-sg', 'Security Groups', 'Stateful ENI-level firewall (allow only)', 'aws', 'security', 'Shield'),
   n('vpc-nacl', 'NACLs', 'Stateless subnet-level firewall (allow & deny)', 'aws', 'security', 'ShieldCheck'),
   n('vpc-rt', 'Route Tables', 'Routing rules for subnets & gateways', 'aws', 'networking', 'GitBranch'),
-  n('vpc-endpoints', 'VPC Endpoints', 'Private access to AWS services (Gateway & Interface)', 'aws', 'networking', 'Link'),
-  n('vpc-peering', 'VPC Peering', 'Non-transitive VPC-to-VPC connectivity', 'aws', 'networking', 'Link'),
+  n('vpc-endpoints', 'VPC Endpoints', 'Private access to AWS services (Gateway & Interface)', 'aws', 'networking', 'Link', { gatewayType: 'egress' }),
+  n('vpc-peering', 'VPC Peering', 'Non-transitive VPC-to-VPC connectivity', 'aws', 'networking', 'Link', { gatewayType: 'both' }),
   n('vpc-flow-logs', 'Flow Logs', 'IP traffic logging for VPC/subnet/ENI', 'aws', 'monitoring', 'FileText'),
-  n('vpc-tgw', 'Transit Gateway', 'Hub for multi-VPC & hybrid connectivity', 'aws', 'networking', 'GitBranch'),
+  n('vpc-tgw', 'Transit Gateway', 'Hub for multi-VPC & hybrid connectivity', 'aws', 'networking', 'GitBranch', { gatewayType: 'both' }),
   n('vpc-eip', 'Elastic IPs', 'Static public IPv4 addresses', 'aws', 'networking', 'MapPin'),
   n('vpc-eni', 'ENIs', 'Virtual network interface cards', 'aws', 'networking', 'Network'),
 ];
@@ -340,8 +341,8 @@ export const rdsEdges: CloudEdge[] = [
 export const lambdaNodes: CloudNode[] = [
   n('lambda-functions', 'Functions', 'Serverless code that runs on invocation', 'aws', 'serverless', 'Zap'),
   n('lambda-layers', 'Layers', 'Shared code, libraries & custom runtimes', 'aws', 'serverless', 'Layers'),
-  n('lambda-triggers', 'Event Sources', 'API GW, S3, SQS, Kinesis, DynamoDB, etc.', 'aws', 'serverless', 'ArrowDownToLine'),
-  n('lambda-destinations', 'Destinations', 'Async success/failure routing to SQS/SNS/Lambda', 'aws', 'serverless', 'ArrowUpRight'),
+  n('lambda-triggers', 'Event Sources', 'API GW, S3, SQS, Kinesis, DynamoDB, etc.', 'aws', 'serverless', 'ArrowDownToLine', { gatewayType: 'ingress' }),
+  n('lambda-destinations', 'Destinations', 'Async success/failure routing to SQS/SNS/Lambda', 'aws', 'serverless', 'ArrowUpRight', { gatewayType: 'egress' }),
   n('lambda-reserved', 'Reserved Concurrency', 'Guaranteed capacity cap (free)', 'aws', 'serverless', 'Maximize'),
   n('lambda-provisioned', 'Provisioned Concurrency', 'Pre-initialized environments (no cold starts)', 'aws', 'serverless', 'Gauge'),
   n('lambda-versions', 'Versions & Aliases', 'Immutable snapshots & weighted traffic shifting', 'aws', 'serverless', 'GitBranch'),
@@ -417,7 +418,7 @@ export const elbNodes: CloudNode[] = [
   n('elb-nlb', 'NLB', 'Network LB – Layer 4 TCP/UDP, ultra-low latency', 'aws', 'networking', 'Zap'),
   n('elb-gwlb', 'GWLB', 'Gateway LB – Layer 3 for network appliances', 'aws', 'networking', 'Shield'),
   n('elb-target-groups', 'Target Groups', 'EC2, IP, Lambda, or ALB targets', 'aws', 'networking', 'Users'),
-  n('elb-listeners', 'Listeners', 'Protocol/port connection handlers', 'aws', 'networking', 'ArrowDownToLine'),
+  n('elb-listeners', 'Listeners', 'Protocol/port connection handlers', 'aws', 'networking', 'ArrowDownToLine', { gatewayType: 'ingress' }),
   n('elb-health-checks', 'Health Checks', 'Target health monitoring', 'aws', 'monitoring', 'HeartPulse'),
   n('elb-rules', 'Listener Rules', 'Path/host/header-based routing (ALB)', 'aws', 'networking', 'GitBranch'),
 ];
@@ -485,8 +486,8 @@ export const gcpNodes: CloudNode[] = [
   n('gcp-cloudsql', 'Cloud SQL', 'Managed Relational DB', 'gcp', 'database', 'Database', { isGroup: true, hasChildren: true }),
   n('gcp-functions', 'Cloud Functions', 'Serverless Functions', 'gcp', 'serverless', 'Zap', { isGroup: true, hasChildren: true }),
   n('gcp-monitoring', 'Cloud Monitoring', 'Ops Suite Monitoring', 'gcp', 'monitoring', 'Activity', { isGroup: true, hasChildren: true }),
-  n('gcp-dns', 'Cloud DNS', 'DNS Service', 'gcp', 'networking', 'Globe'),
-  n('gcp-lb', 'Cloud Load Balancing', 'Global Load Balancer', 'gcp', 'networking', 'GitBranch'),
+  n('gcp-dns', 'Cloud DNS', 'DNS Service', 'gcp', 'networking', 'Globe', { gatewayType: 'ingress' }),
+  n('gcp-lb', 'Cloud Load Balancing', 'Global Load Balancer', 'gcp', 'networking', 'GitBranch', { gatewayType: 'ingress' }),
   n('gcp-pubsub', 'Pub/Sub', 'Messaging Service', 'gcp', 'messaging', 'Inbox'),
   n('gcp-bigquery', 'BigQuery', 'Data Warehouse', 'gcp', 'database', 'Database'),
 ];
@@ -555,7 +556,7 @@ export const gkeNodePoolEdges: CloudEdge[] = [
 export const gkeNetworkingNodes: CloudNode[] = [
   n('gke-net-vpc-native', 'VPC-Native', 'Alias IP ranges for pods', 'gcp', 'networking', 'Network'),
   n('gke-net-dns', 'kube-dns', 'Cluster DNS', 'gcp', 'networking', 'Globe'),
-  n('gke-net-ingress', 'GKE Ingress', 'Google Cloud Load Balancer', 'gcp', 'networking', 'ArrowDownToLine'),
+  n('gke-net-ingress', 'GKE Ingress', 'Google Cloud Load Balancer', 'gcp', 'networking', 'ArrowDownToLine', { gatewayType: 'ingress' }),
   n('gke-net-services', 'Services', 'ClusterIP, NodePort, LoadBalancer', 'gcp', 'networking', 'GitBranch'),
 ];
 
@@ -577,8 +578,8 @@ export const azureNodes: CloudNode[] = [
   n('az-sql', 'Azure SQL', 'Managed SQL Database', 'azure', 'database', 'Database', { isGroup: true, hasChildren: true }),
   n('az-functions', 'Azure Functions', 'Serverless Compute', 'azure', 'serverless', 'Zap', { isGroup: true, hasChildren: true }),
   n('az-monitor', 'Azure Monitor', 'Monitoring & Diagnostics', 'azure', 'monitoring', 'Activity', { isGroup: true, hasChildren: true }),
-  n('az-dns', 'Azure DNS', 'DNS Service', 'azure', 'networking', 'Globe'),
-  n('az-lb', 'Load Balancer', 'Azure Load Balancer', 'azure', 'networking', 'GitBranch'),
+  n('az-dns', 'Azure DNS', 'DNS Service', 'azure', 'networking', 'Globe', { gatewayType: 'ingress' }),
+  n('az-lb', 'Load Balancer', 'Azure Load Balancer', 'azure', 'networking', 'GitBranch', { gatewayType: 'ingress' }),
   n('az-servicebus', 'Service Bus', 'Messaging Service', 'azure', 'messaging', 'Inbox'),
   n('az-cosmos', 'Cosmos DB', 'Multi-model NoSQL', 'azure', 'database', 'Database'),
 ];
@@ -647,7 +648,7 @@ export const aksNodePoolEdges: CloudEdge[] = [
 export const aksNetworkingNodes: CloudNode[] = [
   n('aks-net-cni', 'Azure CNI', 'VNet IPs for pods', 'azure', 'networking', 'Network'),
   n('aks-net-dns', 'CoreDNS', 'Cluster DNS', 'azure', 'networking', 'Globe'),
-  n('aks-net-ingress', 'AGIC', 'Application Gateway Ingress', 'azure', 'networking', 'ArrowDownToLine'),
+  n('aks-net-ingress', 'AGIC', 'Application Gateway Ingress', 'azure', 'networking', 'ArrowDownToLine', { gatewayType: 'ingress' }),
   n('aks-net-services', 'Services', 'ClusterIP, NodePort, LoadBalancer', 'azure', 'networking', 'GitBranch'),
 ];
 

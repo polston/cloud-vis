@@ -4,17 +4,31 @@ import type { CloudNodeData } from '../types';
 import type { HandleInfo } from '../utils/layout';
 import { getIcon } from '../utils/icons';
 
+const gatewayColors = {
+  ingress: '#22C55E',
+  egress: '#F97316',
+  both: '#3B82F6',
+} as const;
+
+const gatewayLabels = {
+  ingress: 'IN',
+  egress: 'OUT',
+  both: 'I/O',
+} as const;
+
 function CloudServiceNode({ data }: NodeProps) {
   const nodeData = data as unknown as CloudNodeData;
   const sourceHandles = (nodeData.sourceHandles as HandleInfo[] | undefined) ?? [];
   const targetHandles = (nodeData.targetHandles as HandleInfo[] | undefined) ?? [];
+  const gwType = nodeData.gatewayType;
 
   return (
     <div
-      className="cloud-node service-node"
+      className={`cloud-node service-node${gwType ? ' gateway-service' : ''}`}
       style={{
         '--node-color': nodeData.color,
         '--node-color-dim': `${nodeData.color}33`,
+        ...(gwType ? { borderColor: `${gatewayColors[gwType]}44`, borderStyle: 'dashed' as const } : {}),
       } as React.CSSProperties}
     >
       {targetHandles.map((h) => (
@@ -38,6 +52,18 @@ function CloudServiceNode({ data }: NodeProps) {
           <div className="node-label">{nodeData.label}</div>
           <div className="node-description">{nodeData.description}</div>
         </div>
+        {gwType && (
+          <span
+            className="gateway-badge"
+            style={{
+              background: `${gatewayColors[gwType]}20`,
+              color: gatewayColors[gwType],
+              borderColor: `${gatewayColors[gwType]}40`,
+            }}
+          >
+            {gatewayLabels[gwType]}
+          </span>
+        )}
       </div>
       {sourceHandles.map((h) => (
         <Handle

@@ -1,7 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
+import { type Node, type Edge } from '@xyflow/react';
 import { graphRegistry } from '../data/graph-data';
 import { getLayoutedElements } from '../utils/layout';
+import { flattenGraph, buildNodeParentMap, isCrossZoneEdge } from '../utils/graph-flattener';
+import { getZoneLayoutedElements } from '../utils/zone-layout';
 import type { BreadcrumbItem, CloudNode, CloudEdge } from '../types';
+
+export const MAX_HIERARCHY_DEPTH = 5;
 
 // Resolve the parent chain from a node id back to root
 function buildBreadcrumb(nodeId: string): BreadcrumbItem[] {
@@ -10,8 +15,6 @@ function buildBreadcrumb(nodeId: string): BreadcrumbItem[] {
   const crumbs: BreadcrumbItem[] = [];
   const parts: string[] = [];
 
-  // For ids like 'eks-control-plane', we walk up the known registry
-  // We maintain a simple parent map based on containment
   const parentMap: Record<string, string> = {
     // AWS
     'aws-vpc': 'aws', 'aws-iam': 'aws', 'aws-eks': 'aws', 'aws-ec2': 'aws',
@@ -46,20 +49,53 @@ function buildBreadcrumb(nodeId: string): BreadcrumbItem[] {
   return crumbs;
 }
 
+export type ViewMode = 'zone' | 'explorer';
+
 export function useGraphNavigation() {
+  const [viewMode, setViewMode] = useState<ViewMode>('zone');
   const [currentLevel, setCurrentLevel] = useState('root');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [zoneDepth, setZoneDepth] = useState(2);
+  const [collapsedZones, setCollapsedZones] = useState<Set<string>>(new Set());
 
   const breadcrumb = useMemo(() => buildBreadcrumb(currentLevel), [currentLevel]);
 
-  const { nodes, edges } = useMemo(() => {
+  // Explorer mode: original drill-down layout
+  const explorerData = useMemo(() => {
+    if (viewMode !== 'explorer') return { nodes: [] as CloudNode[], edges: [] as CloudEdge[] };
     const level = graphRegistry[currentLevel];
     if (!level) return { nodes: [] as CloudNode[], edges: [] as CloudEdge[] };
     return getLayoutedElements(level.nodes, level.edges, 'TB') as {
       nodes: CloudNode[];
       edges: CloudEdge[];
     };
-  }, [currentLevel]);
+  }, [currentLevel, viewMode]);
+
+  // Zone mode: flattened graph with nested zones
+  const zoneData = useMemo(() => {
+    if (viewMode !== 'zone') return { nodes: [] as Node[], edges: [] as Edge[] };
+    const { nodes: flatNodes, edges: flatEdges } = flattenGraph(zoneDepth, collapsedZones);
+    const layouted = getZoneLayoutedElements(flatNodes, flatEdges);
+
+    // Style cross-zone edges
+    const nodeParentMap = buildNodeParentMap(layouted.nodes);
+    const styledEdges = layouted.edges.map((edge) => {
+      if (isCrossZoneEdge(edge, nodeParentMap)) {
+        return {
+          ...edge,
+          style: { stroke: '#F59E0B', strokeWidth: 2, strokeDasharray: '6 3' },
+          className: 'cross-zone-edge',
+          animated: true,
+        };
+      }
+      return edge;
+    });
+
+    return { nodes: layouted.nodes, edges: styledEdges };
+  }, [viewMode, zoneDepth, collapsedZones]);
+
+  const nodes = viewMode === 'zone' ? zoneData.nodes : explorerData.nodes;
+  const edges = viewMode === 'zone' ? zoneData.edges : explorerData.edges;
 
   const currentLevelData = graphRegistry[currentLevel];
 
@@ -74,14 +110,37 @@ export function useGraphNavigation() {
     setSelectedNodeId(nodeId);
   }, []);
 
+  const toggleZoneCollapse = useCallback((zoneId: string) => {
+    setCollapsedZones((prev) => {
+      const next = new Set(prev);
+      if (next.has(zoneId)) {
+        next.delete(zoneId);
+      } else {
+        next.add(zoneId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleViewMode = useCallback(() => {
+    setViewMode((prev) => (prev === 'zone' ? 'explorer' : 'zone'));
+    setSelectedNodeId(null);
+  }, []);
+
   return {
+    viewMode,
     currentLevel,
     currentLevelData,
     nodes,
     edges,
     breadcrumb,
     selectedNodeId,
+    zoneDepth,
+    collapsedZones,
     navigateTo,
     selectNode,
+    toggleZoneCollapse,
+    toggleViewMode,
+    setZoneDepth,
   };
 }
