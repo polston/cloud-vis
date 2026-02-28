@@ -84,7 +84,7 @@ export const awsEdges: CloudEdge[] = [
   e('aws-eks', 'aws-iam', 'Auth'),
   e('aws-ec2', 'aws-s3', 'Read/Write'),
   e('aws-ec2', 'aws-rds', 'Query'),
-  e('aws-lambda', 'aws-s3', 'Trigger'),
+  e('aws-s3', 'aws-lambda', 'Triggers'),
   e('aws-lambda', 'aws-sqs', 'Poll'),
   e('aws-sns', 'aws-sqs', 'Fanout'),
   e('aws-sns', 'aws-lambda', 'Triggers'),
@@ -110,7 +110,7 @@ export const eksNodes: CloudNode[] = [
   n('eks-networking', 'Cluster Networking', 'VPC CNI, CoreDNS & kube-proxy', 'aws', 'networking', 'Network', { isGroup: true, hasChildren: true }),
   n('eks-fargate', 'Fargate Profiles', 'Serverless pods – no EC2 management', 'aws', 'serverless', 'Cloud'),
   n('eks-addons', 'EKS Add-ons', 'Managed operational software (CNI, DNS, proxy)', 'aws', 'kubernetes', 'Layers'),
-  n('eks-pod-identity', 'Pod Identity', 'Pod-level IAM credentials via OIDC', 'aws', 'security', 'Key'),
+  n('eks-pod-identity', 'Pod Identity', 'Pod-level IAM credentials (simpler alternative to IRSA)', 'aws', 'security', 'Key'),
 ];
 
 export const eksEdges: CloudEdge[] = [
@@ -342,7 +342,7 @@ export const lambdaNodes: CloudNode[] = [
   n('lambda-functions', 'Functions', 'Serverless code that runs on invocation', 'aws', 'serverless', 'Zap'),
   n('lambda-layers', 'Layers', 'Shared code, libraries & custom runtimes', 'aws', 'serverless', 'Layers'),
   n('lambda-triggers', 'Event Sources', 'API GW, S3, SQS, Kinesis, DynamoDB, etc.', 'aws', 'serverless', 'ArrowDownToLine', { gatewayType: 'ingress' }),
-  n('lambda-destinations', 'Destinations', 'Async success/failure routing to SQS/SNS/Lambda', 'aws', 'serverless', 'ArrowUpRight', { gatewayType: 'egress' }),
+  n('lambda-destinations', 'Destinations', 'Async success/failure routing to SQS/SNS/Lambda/EventBridge', 'aws', 'serverless', 'ArrowUpRight', { gatewayType: 'egress' }),
   n('lambda-reserved', 'Reserved Concurrency', 'Guaranteed capacity cap (free)', 'aws', 'serverless', 'Maximize'),
   n('lambda-provisioned', 'Provisioned Concurrency', 'Pre-initialized environments (no cold starts)', 'aws', 'serverless', 'Gauge'),
   n('lambda-versions', 'Versions & Aliases', 'Immutable snapshots & weighted traffic shifting', 'aws', 'serverless', 'GitBranch'),
@@ -368,7 +368,7 @@ export const cloudwatchNodes: CloudNode[] = [
   n('cw-alarms', 'Alarms', 'Threshold-based alerts with actions', 'aws', 'monitoring', 'Bell'),
   n('cw-composite-alarms', 'Composite Alarms', 'Combine multiple alarms to reduce noise', 'aws', 'monitoring', 'Bell'),
   n('cw-logs', 'Logs', 'Log collection, storage & management', 'aws', 'monitoring', 'FileText'),
-  n('cw-logs-insights', 'Logs Insights', 'Interactive SQL-based log queries', 'aws', 'monitoring', 'Search'),
+  n('cw-logs-insights', 'Logs Insights', 'Interactive log query engine (custom QL & SQL)', 'aws', 'monitoring', 'Search'),
   n('cw-dashboards', 'Dashboards', 'Unified metric & log visualization', 'aws', 'monitoring', 'LayoutDashboard'),
   n('cw-anomaly-detection', 'Anomaly Detection', 'ML-based dynamic thresholds', 'aws', 'monitoring', 'Activity'),
   n('cw-container-insights', 'Container Insights', 'ECS/EKS/Fargate monitoring', 'aws', 'monitoring', 'Box'),
@@ -485,11 +485,11 @@ export const gcpNodes: CloudNode[] = [
   n('gcp-gcs', 'Cloud Storage', 'Object Storage', 'gcp', 'storage', 'HardDrive', { isGroup: true, hasChildren: true }),
   n('gcp-cloudsql', 'Cloud SQL', 'Managed Relational DB', 'gcp', 'database', 'Database', { isGroup: true, hasChildren: true }),
   n('gcp-functions', 'Cloud Functions', 'Serverless Functions', 'gcp', 'serverless', 'Zap', { isGroup: true, hasChildren: true }),
-  n('gcp-monitoring', 'Cloud Monitoring', 'Ops Suite Monitoring', 'gcp', 'monitoring', 'Activity', { isGroup: true, hasChildren: true }),
+  n('gcp-monitoring', 'Cloud Monitoring', 'Cloud Monitoring (Observability suite)', 'gcp', 'monitoring', 'Activity', { isGroup: true, hasChildren: true }),
   n('gcp-dns', 'Cloud DNS', 'DNS Service', 'gcp', 'networking', 'Globe', { gatewayType: 'ingress' }),
   n('gcp-lb', 'Cloud Load Balancing', 'Global Load Balancer', 'gcp', 'networking', 'GitBranch', { gatewayType: 'ingress' }),
   n('gcp-pubsub', 'Pub/Sub', 'Messaging Service', 'gcp', 'messaging', 'Inbox'),
-  n('gcp-bigquery', 'BigQuery', 'Data Warehouse', 'gcp', 'database', 'Database'),
+  n('gcp-bigquery', 'BigQuery', 'Data Warehouse', 'gcp', 'analytics', 'Database'),
 ];
 
 export const gcpEdges: CloudEdge[] = [
@@ -502,13 +502,13 @@ export const gcpEdges: CloudEdge[] = [
   e('gcp-gke', 'gcp-iam', 'Auth'),
   e('gcp-gce', 'gcp-gcs', 'Read/Write'),
   e('gcp-gce', 'gcp-cloudsql', 'Query'),
-  e('gcp-functions', 'gcp-gcs', 'Trigger'),
+  e('gcp-gcs', 'gcp-functions', 'Triggers'),
   e('gcp-functions', 'gcp-pubsub', 'Subscribe'),
   e('gcp-functions', 'gcp-cloudsql', 'Query'),
   e('gcp-monitoring', 'gcp-gce', 'Monitors'),
   e('gcp-monitoring', 'gcp-gke', 'Monitors'),
   e('gcp-monitoring', 'gcp-functions', 'Monitors'),
-  e('gcp-functions', 'gcp-vpc', 'Inside'),
+  e('gcp-functions', 'gcp-vpc', 'VPC Connector'),
   e('gcp-pubsub', 'gcp-bigquery', 'Streams to'),
 ];
 
@@ -571,7 +571,7 @@ export const gkeNetworkingEdges: CloudEdge[] = [
 // ═══════════════════════════════════════════════════════════════════════
 export const azureNodes: CloudNode[] = [
   n('az-vnet', 'Virtual Network', 'VNet – isolated network', 'azure', 'networking', 'Network', { isGroup: true, hasChildren: true }),
-  n('az-ad', 'Entra ID', 'Identity & Access (Azure AD)', 'azure', 'security', 'Shield', { isGroup: true, hasChildren: true }),
+  n('az-ad', 'Entra ID', 'Identity & Access (formerly Azure AD)', 'azure', 'security', 'Shield', { isGroup: true, hasChildren: true }),
   n('az-aks', 'AKS', 'Azure Kubernetes Service', 'azure', 'kubernetes', 'Box', { isGroup: true, hasChildren: true }),
   n('az-vm', 'Virtual Machines', 'Azure VMs', 'azure', 'compute', 'Server', { isGroup: true, hasChildren: true }),
   n('az-blob', 'Blob Storage', 'Object Storage', 'azure', 'storage', 'HardDrive', { isGroup: true, hasChildren: true }),
@@ -594,14 +594,14 @@ export const azureEdges: CloudEdge[] = [
   e('az-aks', 'az-ad', 'Auth'),
   e('az-vm', 'az-blob', 'Read/Write'),
   e('az-vm', 'az-sql', 'Query'),
-  e('az-functions', 'az-blob', 'Trigger'),
+  e('az-blob', 'az-functions', 'Triggers'),
   e('az-functions', 'az-servicebus', 'Subscribe'),
   e('az-functions', 'az-sql', 'Query'),
   e('az-monitor', 'az-vm', 'Monitors'),
   e('az-monitor', 'az-aks', 'Monitors'),
   e('az-monitor', 'az-functions', 'Monitors'),
-  e('az-functions', 'az-vnet', 'Inside'),
-  e('az-cosmos', 'az-vnet', 'Inside'),
+  e('az-functions', 'az-vnet', 'VNet Integration'),
+  e('az-cosmos', 'az-vnet', 'Private Endpoint'),
 ];
 
 // ─── AKS internals ────────────────────────────────────────────────────
@@ -646,7 +646,7 @@ export const aksNodePoolEdges: CloudEdge[] = [
 ];
 
 export const aksNetworkingNodes: CloudNode[] = [
-  n('aks-net-cni', 'Azure CNI', 'VNet IPs for pods', 'azure', 'networking', 'Network'),
+  n('aks-net-cni', 'Azure CNI', 'Pod networking (Overlay or VNet IPs)', 'azure', 'networking', 'Network'),
   n('aks-net-dns', 'CoreDNS', 'Cluster DNS', 'azure', 'networking', 'Globe'),
   n('aks-net-ingress', 'AGIC', 'Application Gateway Ingress', 'azure', 'networking', 'ArrowDownToLine', { gatewayType: 'ingress' }),
   n('aks-net-services', 'Services', 'ClusterIP, NodePort, LoadBalancer', 'azure', 'networking', 'GitBranch'),

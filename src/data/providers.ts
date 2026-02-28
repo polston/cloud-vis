@@ -45,5 +45,6 @@ export const categoryColors: Record<string, string> = {
   monitoring: '#F59E0B',
   serverless: '#EC4899',
   ai: '#8B5CF6',
-  messaging: '#F97316',
+  messaging: '#14B8A6',
+  analytics: '#6366F1',
 };
