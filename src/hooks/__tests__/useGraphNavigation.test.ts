@@ -80,6 +80,41 @@ describe('useGraphNavigation – lock / position-override feature', () => {
     }
   });
 
+  // ── Zone container zIndex layering ─────────────────────────
+
+  it('nested zones have higher zIndex than their parent zones', () => {
+    const { result } = renderHook(() => useGraphNavigation(), { wrapper });
+    const zoneNodes = result.current.nodes.filter((n) => n.type === 'zoneContainer');
+    expect(zoneNodes.length).toBeGreaterThan(0);
+
+    // Build a map of zone id → zIndex
+    const zIndexMap = new Map<string, number>();
+    for (const node of zoneNodes) {
+      zIndexMap.set(node.id, node.zIndex ?? 0);
+    }
+
+    // For each zone that has a parentId which is also a zone, child zIndex > parent zIndex
+    for (const node of zoneNodes) {
+      const parentId = (node as typeof node & { parentId?: string }).parentId;
+      if (parentId && zIndexMap.has(parentId)) {
+        expect(node.zIndex).toBeGreaterThan(zIndexMap.get(parentId)!);
+      }
+    }
+  });
+
+  it('leaf nodes have higher zIndex than any zone container', () => {
+    const { result } = renderHook(() => useGraphNavigation(), { wrapper });
+    const zoneNodes = result.current.nodes.filter((n) => n.type === 'zoneContainer');
+    const leafNodes = result.current.nodes.filter((n) => n.type !== 'zoneContainer');
+    expect(zoneNodes.length).toBeGreaterThan(0);
+    expect(leafNodes.length).toBeGreaterThan(0);
+
+    const maxZoneZIndex = Math.max(...zoneNodes.map((n) => n.zIndex ?? 0));
+    for (const node of leafNodes) {
+      expect(node.zIndex).toBeGreaterThan(maxZoneZIndex);
+    }
+  });
+
   // ── Leaf node draggable property ─────────────────────────
 
   it('leaf nodes have draggable:true when nodes are unlocked (default)', () => {

@@ -97,14 +97,19 @@ export function useGraphNavigation() {
     const { nodes: flatNodes, edges: flatEdges } = flattenGraph(zoneDepth, collapsedZones);
     const layouted = getZoneLayoutedElements(flatNodes, flatEdges);
 
-    // Apply lock states and position overrides to nodes
+    // Apply lock states, z-index layering, and position overrides to nodes.
+    // Deeper zones get higher zIndex so inner categories take drag priority
+    // over their parents. Leaf nodes sit above all zones.
     const nodesWithLocks = layouted.nodes.map((node) => {
       const isZone = node.type === 'zoneContainer';
       const draggable = isZone ? !zonesLocked : !nodesLocked;
       const posOverride = nodePositionOverridesRef.current.get(node.id);
+      const zoneLevel = isZone ? ((node.data as Record<string, unknown>).zoneLevel as number) ?? 0 : 0;
+      const zIndex = isZone ? 1 + zoneLevel : MAX_HIERARCHY_DEPTH + 1;
       return {
         ...node,
         draggable,
+        zIndex,
         ...(posOverride ? { position: posOverride } : {}),
       };
     });
