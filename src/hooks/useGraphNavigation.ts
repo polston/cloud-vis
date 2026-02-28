@@ -1,8 +1,8 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { type Node, type Edge } from '@xyflow/react';
 import { graphRegistry } from '../data/graph-data';
 import { getLayoutedElements } from '../utils/layout';
-import { flattenGraph, buildNodeParentMap, isCrossZoneEdge } from '../utils/graph-flattener';
+import { flattenGraph, buildNodeParentMap, isCrossZoneEdge, parentMap } from '../utils/graph-flattener';
 import { getZoneLayoutedElements } from '../utils/zone-layout';
 import { applyEdgeStyle } from '../utils/edge-styles';
 import type { BreadcrumbItem, CloudNode, CloudEdge } from '../types';
@@ -15,24 +15,6 @@ function buildBreadcrumb(nodeId: string): BreadcrumbItem[] {
 
   const crumbs: BreadcrumbItem[] = [];
   const parts: string[] = [];
-
-  const parentMap: Record<string, string> = {
-    // AWS
-    'aws-vpc': 'aws', 'aws-iam': 'aws', 'aws-eks': 'aws', 'aws-ec2': 'aws',
-    'aws-s3': 'aws', 'aws-rds': 'aws', 'aws-lambda': 'aws', 'aws-cloudwatch': 'aws',
-    'aws-route53': 'aws', 'aws-elb': 'aws', 'aws-sqs': 'aws', 'aws-sns': 'aws',
-    // EKS
-    'eks-control-plane': 'aws-eks', 'eks-worker-nodes': 'aws-eks', 'eks-networking': 'aws-eks',
-    'wn-pods': 'eks-worker-nodes',
-    // GCP
-    'gcp-vpc': 'gcp', 'gcp-iam': 'gcp', 'gcp-gke': 'gcp', 'gcp-gce': 'gcp',
-    'gcp-gcs': 'gcp', 'gcp-cloudsql': 'gcp', 'gcp-functions': 'gcp', 'gcp-monitoring': 'gcp',
-    'gke-control-plane': 'gcp-gke', 'gke-node-pools': 'gcp-gke', 'gke-networking': 'gcp-gke',
-    // Azure
-    'az-vnet': 'azure', 'az-ad': 'azure', 'az-aks': 'azure', 'az-vm': 'azure',
-    'az-blob': 'azure', 'az-sql': 'azure', 'az-functions': 'azure', 'az-monitor': 'azure',
-    'aks-control-plane': 'az-aks', 'aks-node-pools': 'az-aks', 'aks-networking': 'az-aks',
-  };
 
   let current: string | undefined = nodeId;
   while (current && current !== 'root') {
@@ -52,12 +34,33 @@ function buildBreadcrumb(nodeId: string): BreadcrumbItem[] {
 
 export type ViewMode = 'zone' | 'explorer';
 
+/** Inject user midY overrides into edge data */
+function applyEdgeOverrides(
+  edges: Edge[],
+  overrides: Map<string, number>
+): Edge[] {
+  if (overrides.size === 0) return edges;
+  return edges.map((edge) => {
+    const userMidY = overrides.get(edge.id);
+    if (userMidY === undefined) return edge;
+    return {
+      ...edge,
+      data: { ...edge.data, userMidY },
+    };
+  });
+}
+
 export function useGraphNavigation() {
   const [viewMode, setViewMode] = useState<ViewMode>('zone');
   const [currentLevel, setCurrentLevel] = useState('root');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [zoneDepth, setZoneDepth] = useState(MAX_HIERARCHY_DEPTH);
   const [collapsedZones, setCollapsedZones] = useState<Set<string>>(new Set());
+
+  // User-dragged edge midY overrides, persisted across navigation
+  const edgeOverridesRef = useRef(new Map<string, number>());
+  // Use a counter to trigger re-render when overrides change
+  const [overrideVersion, setOverrideVersion] = useState(0);
 
   const breadcrumb = useMemo(() => buildBreadcrumb(currentLevel), [currentLevel]);
 
@@ -72,9 +75,13 @@ export function useGraphNavigation() {
     };
     return {
       nodes: layouted.nodes,
-      edges: layouted.edges.map(applyEdgeStyle) as CloudEdge[],
+      edges: applyEdgeOverrides(
+        layouted.edges.map(applyEdgeStyle),
+        edgeOverridesRef.current
+      ) as CloudEdge[],
     };
-  }, [currentLevel, viewMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLevel, viewMode, overrideVersion]);
 
   // Zone mode: flattened graph with nested zones
   const zoneData = useMemo(() => {
@@ -100,8 +107,12 @@ export function useGraphNavigation() {
       return styled;
     });
 
-    return { nodes: layouted.nodes, edges: styledEdges };
-  }, [viewMode, zoneDepth, collapsedZones]);
+    return {
+      nodes: layouted.nodes,
+      edges: applyEdgeOverrides(styledEdges, edgeOverridesRef.current),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, zoneDepth, collapsedZones, overrideVersion]);
 
   const nodes = viewMode === 'zone' ? zoneData.nodes : explorerData.nodes;
   const edges = viewMode === 'zone' ? zoneData.edges : explorerData.edges;
@@ -136,6 +147,16 @@ export function useGraphNavigation() {
     setSelectedNodeId(null);
   }, []);
 
+  /** Set or clear a user-dragged midY override for an edge */
+  const updateEdgeMidY = useCallback((edgeId: string, midY: number | null) => {
+    if (midY === null) {
+      edgeOverridesRef.current.delete(edgeId);
+    } else {
+      edgeOverridesRef.current.set(edgeId, midY);
+    }
+    setOverrideVersion((v) => v + 1);
+  }, []);
+
   return {
     viewMode,
     currentLevel,
@@ -151,5 +172,6 @@ export function useGraphNavigation() {
     toggleZoneCollapse,
     toggleViewMode,
     setZoneDepth,
+    updateEdgeMidY,
   };
 }
