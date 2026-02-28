@@ -3,28 +3,24 @@ import { graphRegistry } from '../data/graph-data';
 import type { CloudNodeData, ZoneNodeData } from '../types';
 
 /**
- * The parent map mirrors the one in useGraphNavigation but is used here
- * to know which registry key is a child of which parent registry key.
+ * Derive the parent map from graphRegistry so it never gets out of sync.
+ * For each registry key, any child node that also has its own registry entry
+ * means that child's parent is the current registry key.
  */
-const parentMap: Record<string, string> = {
-  // AWS
-  'aws-vpc': 'aws', 'aws-iam': 'aws', 'aws-eks': 'aws', 'aws-ec2': 'aws',
-  'aws-s3': 'aws', 'aws-rds': 'aws', 'aws-lambda': 'aws', 'aws-cloudwatch': 'aws',
-  'aws-route53': 'aws', 'aws-elb': 'aws', 'aws-sqs': 'aws', 'aws-sns': 'aws',
-  // EKS
-  'eks-control-plane': 'aws-eks', 'eks-worker-nodes': 'aws-eks', 'eks-networking': 'aws-eks',
-  'wn-pods': 'eks-worker-nodes',
-  // GCP
-  'gcp-vpc': 'gcp', 'gcp-iam': 'gcp', 'gcp-gke': 'gcp', 'gcp-gce': 'gcp',
-  'gcp-gcs': 'gcp', 'gcp-cloudsql': 'gcp', 'gcp-functions': 'gcp', 'gcp-monitoring': 'gcp',
-  'gke-control-plane': 'gcp-gke', 'gke-node-pools': 'gcp-gke', 'gke-networking': 'gcp-gke',
-  // Azure
-  'az-vnet': 'azure', 'az-ad': 'azure', 'az-aks': 'azure', 'az-vm': 'azure',
-  'az-blob': 'azure', 'az-sql': 'azure', 'az-functions': 'azure', 'az-monitor': 'azure',
-  'aks-control-plane': 'az-aks', 'aks-node-pools': 'az-aks', 'aks-networking': 'az-aks',
-};
+function buildParentMapFromRegistry(): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [registryKey, level] of Object.entries(graphRegistry)) {
+    if (registryKey === 'root') continue;
+    for (const node of level.nodes) {
+      if (graphRegistry[node.id]) {
+        map[node.id] = registryKey;
+      }
+    }
+  }
+  return map;
+}
 
-export { parentMap };
+export const parentMap = buildParentMapFromRegistry();
 
 export interface FlattenedGraph {
   nodes: Node[];
@@ -121,7 +117,7 @@ export function flattenGraph(
       allEdges.push({
         ...edge,
         id: edgeId,
-        type: 'smoothstep',
+        type: 'smartEdge',
         style: { stroke: '#475569', strokeWidth: 1.5 },
       });
     }

@@ -1,5 +1,6 @@
 import dagre from 'dagre';
 import { type Node, type Edge } from '@xyflow/react';
+import { computeEdgeRouting } from './edge-routing';
 
 const LEAF_WIDTH = 200;
 const LEAF_HEIGHT = 70;
@@ -102,13 +103,22 @@ export function getZoneLayoutedElements(
 
     const zoneEdges = edgesInZone.get(parentKey) ?? [];
 
+    // Dynamic spacing based on edge density within this zone
+    let maxFan = 0;
+    for (const cid of children) {
+      const fan = zoneEdges.filter(e => e.source === cid || e.target === cid).length;
+      maxFan = Math.max(maxFan, fan);
+    }
+    const nodesep = Math.min(50 + Math.max(0, maxFan - 3) * 15, 150);
+    const ranksep = Math.min(70 + Math.max(0, maxFan - 3) * 20, 200);
+
     // Run Dagre on this group's children
     const g = new dagre.graphlib.Graph();
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({
       rankdir: 'TB',
-      nodesep: 50,
-      ranksep: 70,
+      nodesep,
+      ranksep,
       marginx: 20,
       marginy: 20,
     });
@@ -239,5 +249,54 @@ export function getZoneLayoutedElements(
     return aOrder - bOrder;
   });
 
-  return { nodes: layoutedNodes, edges };
+  // ── Edge routing: handle spreading, midY offsets, label collision ──
+  // Build absolute position map by walking parent chain
+  const absoluteBoundsMap = new Map<string, { x: number; y: number; w: number; h: number }>();
+
+  function getAbsolutePosition(nodeId: string): { x: number; y: number } {
+    const node = nodeById.get(nodeId);
+    const relPos = absolutePositions.get(nodeId) ?? { x: 0, y: 0 };
+    const parentId = (node as Node & { parentId?: string } | undefined)?.parentId;
+    if (!parentId) return relPos;
+    const parentAbs = getAbsolutePosition(parentId);
+    return { x: relPos.x + parentAbs.x, y: relPos.y + parentAbs.y };
+  }
+
+  for (const node of layoutedNodes) {
+    if (isZone.has(node.id)) continue; // only route to/from leaf nodes
+    const absPos = getAbsolutePosition(node.id);
+    const size = sizeOf.get(node.id) ?? { width: LEAF_WIDTH, height: LEAF_HEIGHT };
+    absoluteBoundsMap.set(node.id, { x: absPos.x, y: absPos.y, w: size.width, h: size.height });
+  }
+
+  // Only route intra-zone edges (edges where both endpoints are leaf nodes)
+  const routableEdges = edges.filter(e => absoluteBoundsMap.has(e.source) && absoluteBoundsMap.has(e.target));
+
+  const routing = computeEdgeRouting(routableEdges, absoluteBoundsMap);
+
+  // Inject handle data into leaf nodes
+  for (const node of layoutedNodes) {
+    const handles = routing.nodeHandles.get(node.id);
+    if (handles) {
+      node.data = { ...node.data, ...handles };
+    }
+  }
+
+  // Inject routing data into edges
+  const routedEdges = edges.map(edge => {
+    const assignment = routing.edgeAssignments.get(edge.id);
+    if (!assignment) return edge;
+    return {
+      ...edge,
+      sourceHandle: assignment.sourceHandle,
+      targetHandle: assignment.targetHandle,
+      data: {
+        ...edge.data,
+        midY: assignment.midY,
+        ...(assignment.labelOffset !== undefined ? { labelOffset: assignment.labelOffset } : {}),
+      },
+    };
+  });
+
+  return { nodes: layoutedNodes, edges: routedEdges };
 }

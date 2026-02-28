@@ -1,4 +1,5 @@
-import { getSmoothStepPath, BaseEdge, type EdgeProps } from '@xyflow/react';
+import { useState, useCallback, useRef } from 'react';
+import { getSmoothStepPath, BaseEdge, type EdgeProps, useReactFlow } from '@xyflow/react';
 
 /**
  * Given the source/target coordinates of a TB smoothstep edge,
@@ -10,9 +11,10 @@ function getPointOnApproxPath(
   sy: number,
   tx: number,
   ty: number,
-  t: number
+  t: number,
+  customMidY?: number
 ): { x: number; y: number } {
-  const midY = (sy + ty) / 2;
+  const midY = customMidY ?? (sy + ty) / 2;
   const segs = [
     { x1: sx, y1: sy, x2: sx, y2: midY },
     { x1: sx, y1: midY, x2: tx, y2: midY },
@@ -56,6 +58,19 @@ export default function SmartEdge({
   markerStart,
   markerEnd,
 }: EdgeProps) {
+  const edgeData = data as Record<string, unknown> | undefined;
+  const layoutMidY = edgeData?.midY as number | undefined;
+  const userMidY = edgeData?.userMidY as number | undefined;
+  const labelOffset = edgeData?.labelOffset as number | undefined;
+
+  const [dragMidY, setDragMidY] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ startY: number; startMidY: number } | null>(null);
+  const { setEdges } = useReactFlow();
+
+  // Priority: drag in progress > user override > layout-computed
+  const effectiveMidY = dragMidY ?? userMidY ?? layoutMidY;
+
   const [edgePath, defaultLabelX, defaultLabelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -63,31 +78,94 @@ export default function SmartEdge({
     targetY,
     sourcePosition,
     targetPosition,
+    ...(effectiveMidY !== undefined ? { centerY: effectiveMidY } : {}),
   });
-
-  const labelOffset = (data as Record<string, unknown> | undefined)?.labelOffset as
-    | number
-    | undefined;
 
   let labelX = defaultLabelX;
   let labelY = defaultLabelY;
 
   if (labelOffset !== undefined && labelOffset !== 0.5) {
-    const pt = getPointOnApproxPath(sourceX, sourceY, targetX, targetY, labelOffset);
+    const pt = getPointOnApproxPath(sourceX, sourceY, targetX, targetY, labelOffset, effectiveMidY);
     labelX = pt.x;
     labelY = pt.y;
   }
 
+  // Compute horizontal segment for drag handle
+  const midY = effectiveMidY ?? (sourceY + targetY) / 2;
+  const hSegMinX = Math.min(sourceX, targetX);
+  const hSegMaxX = Math.max(sourceX, targetX);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    dragStartRef.current = { startY: e.clientY, startMidY: midY };
+    setIsDragging(true);
+  }, [midY]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragStartRef.current) return;
+    const deltaY = e.clientY - dragStartRef.current.startY;
+    setDragMidY(dragStartRef.current.startMidY + deltaY);
+  }, []);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    if (!dragStartRef.current) return;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    const finalMidY = dragStartRef.current.startMidY + (e.clientY - dragStartRef.current.startY);
+    dragStartRef.current = null;
+    setIsDragging(false);
+    setDragMidY(null);
+
+    // Commit to edge data
+    setEdges((eds) =>
+      eds.map((edge) =>
+        edge.id === id
+          ? { ...edge, data: { ...edge.data, userMidY: finalMidY } }
+          : edge
+      )
+    );
+  }, [id, setEdges]);
+
+  const onDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Reset to auto position
+    setEdges((eds) =>
+      eds.map((edge) => {
+        if (edge.id !== id) return edge;
+        const { userMidY: _, ...restData } = (edge.data ?? {}) as Record<string, unknown>;
+        return { ...edge, data: restData };
+      })
+    );
+  }, [id, setEdges]);
+
   return (
-    <BaseEdge
-      id={id}
-      path={edgePath}
-      style={style}
-      label={label}
-      labelX={labelX}
-      labelY={labelY}
-      markerStart={markerStart}
-      markerEnd={markerEnd}
-    />
+    <>
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        style={style}
+        label={label}
+        labelX={labelX}
+        labelY={labelY}
+        markerStart={markerStart}
+        markerEnd={markerEnd}
+      />
+      {/* Invisible wider drag handle over horizontal segment */}
+      <path
+        d={`M ${hSegMinX} ${midY} L ${hSegMaxX} ${midY}`}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={15}
+        style={{
+          cursor: isDragging ? 'grabbing' : 'grab',
+          pointerEvents: 'stroke',
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onDoubleClick={onDoubleClick}
+      />
+    </>
   );
 }
