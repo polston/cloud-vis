@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useEffect } from 'react';
+import { useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -56,6 +56,31 @@ export default function GraphView() {
   const { fitView } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Allow pinch-to-zoom when the gesture starts on a node.
+  // d3-drag on node elements calls stopImmediatePropagation() on touch
+  // events, preventing them from reaching d3-zoom on the viewport for
+  // pinch-to-zoom. Intercept in the capture phase (fires before bubble)
+  // and neutralize stopImmediatePropagation for multi-touch gestures.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const neutralize = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.stopImmediatePropagation = () => {};
+      }
+    };
+
+    el.addEventListener('touchstart', neutralize, { capture: true });
+    el.addEventListener('touchmove', neutralize, { capture: true });
+
+    return () => {
+      el.removeEventListener('touchstart', neutralize, { capture: true });
+      el.removeEventListener('touchmove', neutralize, { capture: true });
+    };
+  }, []);
 
   useEffect(() => {
     setNodes(layoutedNodes);
@@ -150,7 +175,7 @@ export default function GraphView() {
         )}
       </div>
 
-      <div className="graph-canvas">
+      <div className="graph-canvas" ref={canvasRef}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
