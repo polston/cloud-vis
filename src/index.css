@@ -1,0 +1,456 @@
+:root {
+  --bg-primary: #0B1120;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1E293B;
+  --bg-card: #162032;
+  --border: #1E293B;
+  --border-bright: #334155;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-dim: #64748B;
+  --accent: #3B82F6;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Graph Container
+   ═══════════════════════════════════════════════════════════════ */
+.graph-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+}
+
+.graph-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 16px 24px;
+  background: linear-gradient(180deg, var(--bg-primary) 60%, transparent);
+  pointer-events: none;
+}
+
+.graph-header > * {
+  pointer-events: auto;
+}
+
+.graph-level-info {
+  margin-top: 8px;
+}
+
+.graph-level-info h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.graph-level-info p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.graph-canvas {
+  flex: 1;
+  width: 100%;
+}
+
+.graph-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgba(11, 17, 32, 0.85);
+  backdrop-filter: blur(8px);
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Breadcrumb
+   ═══════════════════════════════════════════════════════════════ */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-item {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+}
+
+.breadcrumb-item:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.breadcrumb-item.active {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.breadcrumb-home {
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.breadcrumb-segment {
+  display: flex;
+  align-items: center;
+}
+
+.breadcrumb-separator {
+  color: var(--text-dim);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Cloud Nodes — shared
+   ═══════════════════════════════════════════════════════════════ */
+.cloud-node {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.cloud-node:hover {
+  border-color: var(--node-color);
+  box-shadow:
+    0 0 0 1px var(--node-color-dim),
+    0 0 20px var(--node-color-dim),
+    0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.node-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--node-color-dim);
+  color: var(--node-color);
+  flex-shrink: 0;
+}
+
+.node-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.node-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.node-description {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Group node specifics ─────────────────────────────────── */
+.group-node {
+  border-left: 3px solid var(--node-color);
+}
+
+.group-node:hover {
+  border-left: 3px solid var(--node-color);
+}
+
+.node-drill-indicator {
+  display: flex;
+  align-items: center;
+  color: var(--text-dim);
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.group-node:hover .node-drill-indicator {
+  color: var(--node-color);
+}
+
+/* ─── Handles ──────────────────────────────────────────────── */
+.node-handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--bg-tertiary) !important;
+  border: 2px solid var(--border-bright) !important;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.cloud-node:hover .node-handle {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   React Flow overrides
+   ═══════════════════════════════════════════════════════════════ */
+.react-flow__renderer {
+  background: var(--bg-primary) !important;
+}
+
+.react-flow__edge-path {
+  stroke: #334155 !important;
+  stroke-width: 1.5 !important;
+}
+
+.react-flow__edge-text {
+  fill: var(--text-dim) !important;
+  font-size: 10px !important;
+}
+
+.react-flow__edge-textbg {
+  fill: var(--bg-primary) !important;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #64748B !important;
+  stroke-width: 2 !important;
+}
+
+/* Controls */
+.graph-controls {
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.graph-controls button {
+  background: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text-secondary) !important;
+  width: 30px !important;
+  height: 30px !important;
+}
+
+.graph-controls button:hover {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+}
+
+.graph-controls button svg {
+  fill: currentColor !important;
+}
+
+.graph-controls button path {
+  fill: currentColor !important;
+}
+
+/* MiniMap */
+.graph-minimap {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Info Panel
+   ═══════════════════════════════════════════════════════════════ */
+.info-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 300px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  z-index: 20;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.info-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.info-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.info-panel-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.info-panel-title h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.info-panel-provider {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.info-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.info-panel-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.info-panel-body {
+  padding: 16px;
+}
+
+.info-panel-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.info-panel-meta {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.info-panel-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: capitalize;
+}
+
+.info-panel-drill-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.info-panel-drill-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Selection ring
+   ═══════════════════════════════════════════════════════════════ */
+.react-flow__node.selected .cloud-node {
+  border-color: var(--node-color) !important;
+  box-shadow:
+    0 0 0 2px var(--node-color-dim),
+    0 0 24px var(--node-color-dim),
+    0 4px 16px rgba(0, 0, 0, 0.3);
+}
