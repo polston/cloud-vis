@@ -454,3 +454,348 @@ body {
     0 0 24px var(--node-color-dim),
     0 4px 16px rgba(0, 0, 0, 0.3);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Toolbar (view toggle + depth control)
+   ═══════════════════════════════════════════════════════════════ */
+.graph-toolbar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(11, 17, 32, 0.9);
+  backdrop-filter: blur(12px);
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.view-toggle-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-bright);
+}
+
+.view-toggle-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Depth Control
+   ═══════════════════════════════════════════════════════════════ */
+.depth-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.depth-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.depth-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.depth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.depth-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-bright);
+}
+
+.depth-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.depth-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 14px;
+  text-align: center;
+}
+
+.depth-slider {
+  width: 60px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.depth-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.depth-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Zone Node
+   ═══════════════════════════════════════════════════════════════ */
+.zone-node {
+  pointer-events: all;
+}
+
+.zone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  height: 40px;
+}
+
+.zone-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zone-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.zone-label-group {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.zone-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.zone-provider {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+
+.zone-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.zone-count {
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Gateway Node
+   ═══════════════════════════════════════════════════════════════ */
+.gateway-node {
+  background: var(--gw-bg);
+  border: 1.5px dashed var(--gw-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 120px;
+}
+
+.gateway-node:hover {
+  box-shadow: 0 0 12px var(--gw-bg);
+  border-style: solid;
+}
+
+.gateway-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gateway-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gw-color);
+}
+
+.gateway-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.gateway-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gateway-type {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--gw-color);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Cross-zone edges
+   ═══════════════════════════════════════════════════════════════ */
+.cross-zone-edge .react-flow__edge-path {
+  stroke: #F59E0B !important;
+  stroke-width: 2 !important;
+  stroke-dasharray: 6 3 !important;
+}
+
+.cross-zone-edge .react-flow__edge-text {
+  fill: #F59E0B !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Header layout tweaks
+   ═══════════════════════════════════════════════════════════════ */
+.graph-header-top {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Zone containers in React Flow need explicit sizing */
+.react-flow__node-zoneContainer {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+/* Zone handles — hidden by default */
+.zone-handle {
+  width: 6px !important;
+  height: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  opacity: 0;
+}
+
+/* ─── Gateway badge on service nodes ──────────────────────── */
+.gateway-badge {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.gateway-service {
+  border-width: 1.5px;
+}
+
+/* ─── Legend for zone view ────────────────────────────────── */
+.graph-legend {
+  position: absolute;
+  bottom: 48px;
+  left: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(11, 17, 32, 0.9);
+  backdrop-filter: blur(8px);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.graph-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  width: 20px;
+  height: 0;
+  border-top: 2px solid;
+}
+
+.legend-line-dashed {
+  border-top-style: dashed;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px dashed;
+}

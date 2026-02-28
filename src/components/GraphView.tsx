@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -11,20 +11,25 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { Map, List } from 'lucide-react';
 
 import CloudServiceNode from './CloudServiceNode';
 import CloudGroupNode from './CloudGroupNode';
+import GatewayNode from './GatewayNode';
+import ZoneNode from './ZoneNode';
 import SmartEdge from './SmartEdge';
 import Breadcrumb from './Breadcrumb';
 import InfoPanel from './InfoPanel';
-import { useGraphNavigation } from '../hooks/useGraphNavigation';
+import DepthControl from './DepthControl';
+import { useGraphNavigation, MAX_HIERARCHY_DEPTH } from '../hooks/useGraphNavigation';
 import { graphRegistry } from '../data/graph-data';
-import type { CloudNodeData } from '../types';
-import { useEffect } from 'react';
+import type { CloudNodeData, ZoneNodeData } from '../types';
 
 const nodeTypes = {
   cloudService: CloudServiceNode,
   cloudGroup: CloudGroupNode,
+  gatewayNode: GatewayNode,
+  zoneContainer: ZoneNode,
 };
 
 const edgeTypes = {
@@ -33,53 +38,71 @@ const edgeTypes = {
 
 export default function GraphView() {
   const {
+    viewMode,
     currentLevelData,
     nodes: layoutedNodes,
     edges: layoutedEdges,
     breadcrumb,
     selectedNodeId,
+    zoneDepth,
     navigateTo,
     selectNode,
+    toggleZoneCollapse,
+    toggleViewMode,
+    setZoneDepth,
   } = useGraphNavigation();
 
   const { fitView } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
-  // Sync layouted nodes/edges when navigation changes
   useEffect(() => {
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
   }, [layoutedNodes, layoutedEdges, setNodes, setEdges]);
 
-  // Center and fit the graph after navigating to a new level
   useEffect(() => {
-    // Wait for nodes to render before fitting the view
     const timeoutId = setTimeout(() => {
-      fitView({ padding: 0.2, duration: 300 });
-    }, 0);
+      fitView({ padding: 0.15, duration: 300 });
+    }, 50);
     return () => clearTimeout(timeoutId);
   }, [layoutedNodes, fitView]);
 
   const selectedNodeData = useMemo(() => {
     if (!selectedNodeId) return null;
     const node = nodes.find((n) => n.id === selectedNodeId);
-    return (node?.data as unknown as CloudNodeData) ?? null;
+    if (!node) return null;
+    return (node.data as unknown as CloudNodeData) ?? null;
   }, [selectedNodeId, nodes]);
 
   const onNodeDoubleClick: NodeMouseHandler = useCallback(
     (_event, node) => {
-      const data = node.data as unknown as CloudNodeData;
-      if (data.hasChildren && graphRegistry[node.id]) {
-        navigateTo(node.id);
+      if (viewMode === 'zone') {
+        // In zone mode, double-click toggles expand/collapse
+        if (node.type === 'zoneContainer') {
+          toggleZoneCollapse(node.id);
+        } else {
+          const data = node.data as unknown as CloudNodeData;
+          if (data.hasChildren && graphRegistry[node.id]) {
+            toggleZoneCollapse(node.id);
+          }
+        }
+      } else {
+        // Explorer mode: drill down
+        const data = node.data as unknown as CloudNodeData;
+        if (data.hasChildren && graphRegistry[node.id]) {
+          navigateTo(node.id);
+        }
       }
     },
-    [navigateTo]
+    [viewMode, navigateTo, toggleZoneCollapse]
   );
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
-      selectNode(node.id);
+      if (node.type !== 'zoneContainer') {
+        selectNode(node.id);
+      }
     },
     [selectNode]
   );
@@ -88,15 +111,46 @@ export default function GraphView() {
     selectNode(null);
   }, [selectNode]);
 
+  const isZoneMode = viewMode === 'zone';
+
   return (
     <div className="graph-container">
       <div className="graph-header">
-        <Breadcrumb items={breadcrumb} onNavigate={navigateTo} />
-        {currentLevelData && (
-          <div className="graph-level-info">
-            <h2>{currentLevelData.label}</h2>
-            <p>{currentLevelData.description}</p>
-          </div>
+        <div className="graph-header-top">
+          {isZoneMode ? (
+            <div className="graph-level-info">
+              <h2>Cloud Infrastructure</h2>
+              <p>Zone graph view &mdash; double-click zones to expand/collapse</p>
+            </div>
+          ) : (
+            <>
+              <Breadcrumb items={breadcrumb} onNavigate={navigateTo} />
+              {currentLevelData && (
+                <div className="graph-level-info">
+                  <h2>{currentLevelData.label}</h2>
+                  <p>{currentLevelData.description}</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="graph-toolbar">
+        <button
+          className={`view-toggle-btn ${isZoneMode ? 'active' : ''}`}
+          onClick={toggleViewMode}
+          title={isZoneMode ? 'Switch to Explorer view' : 'Switch to Zone graph'}
+        >
+          {isZoneMode ? <List size={14} /> : <Map size={14} />}
+          <span>{isZoneMode ? 'Explorer' : 'Zones'}</span>
+        </button>
+        {isZoneMode && (
+          <DepthControl
+            depth={zoneDepth}
+            maxDepth={MAX_HIERARCHY_DEPTH}
+            onChange={setZoneDepth}
+          />
         )}
       </div>
 
@@ -112,9 +166,9 @@ export default function GraphView() {
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView
-          fitViewOptions={{ padding: 0.2 }}
-          minZoom={0.3}
-          maxZoom={2}
+          fitViewOptions={{ padding: 0.15 }}
+          minZoom={0.05}
+          maxZoom={2.5}
           proOptions={{ hideAttribution: true }}
         >
           <Background
@@ -129,7 +183,7 @@ export default function GraphView() {
           />
           <MiniMap
             nodeColor={(node) => {
-              const data = node.data as unknown as CloudNodeData;
+              const data = node.data as unknown as (CloudNodeData | ZoneNodeData);
               return data?.color ?? '#475569';
             }}
             maskColor="rgba(0, 0, 0, 0.7)"
@@ -142,11 +196,34 @@ export default function GraphView() {
         nodeData={selectedNodeData}
         nodeId={selectedNodeId}
         onClose={() => selectNode(null)}
-        onDrillDown={navigateTo}
+        onDrillDown={viewMode === 'zone' ? toggleZoneCollapse : navigateTo}
       />
 
+      {isZoneMode && (
+        <div className="graph-legend">
+          <div className="graph-legend-item">
+            <span className="legend-line" style={{ borderColor: '#475569' }} />
+            <span>Same-zone edge</span>
+          </div>
+          <div className="graph-legend-item">
+            <span className="legend-line legend-line-dashed" style={{ borderColor: '#F59E0B' }} />
+            <span>Cross-zone edge</span>
+          </div>
+          <div className="graph-legend-item">
+            <span className="legend-dot" style={{ borderColor: '#22C55E', background: 'rgba(34,197,94,0.2)' }} />
+            <span>Ingress point</span>
+          </div>
+          <div className="graph-legend-item">
+            <span className="legend-dot" style={{ borderColor: '#F97316', background: 'rgba(249,115,22,0.2)' }} />
+            <span>Egress point</span>
+          </div>
+        </div>
+      )}
+
       <div className="graph-hint">
-        Double-click a group node to drill down &middot; Click to inspect &middot; Drag to rearrange
+        {isZoneMode
+          ? 'Double-click zones to expand/collapse \u00b7 Scroll to zoom \u00b7 Drag to pan'
+          : 'Double-click a group to drill down \u00b7 Click to inspect \u00b7 Drag to rearrange'}
       </div>
     </div>
   );
