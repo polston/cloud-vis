@@ -59,42 +59,26 @@ export default function GraphView() {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Allow pinch-to-zoom when the gesture starts on a node.
-  // React Flow's node wrapper captures the first pointer for drag, which
-  // blocks the viewport zoom handler from seeing both pointers. When we
-  // detect multi-touch, release those captures so pinch-to-zoom works.
+  // d3-drag on node elements calls stopImmediatePropagation() on touch
+  // events, preventing them from reaching d3-zoom on the viewport for
+  // pinch-to-zoom. Intercept in the capture phase (fires before bubble)
+  // and neutralize stopImmediatePropagation for multi-touch gestures.
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
 
-    const pointers = new Set<number>();
-
-    const onDown = (e: PointerEvent) => {
-      pointers.add(e.pointerId);
-      if (pointers.size >= 2) {
-        el.querySelectorAll('.react-flow__node').forEach((node) => {
-          pointers.forEach((id) => {
-            try {
-              (node as HTMLElement).releasePointerCapture(id);
-            } catch {
-              /* already released */
-            }
-          });
-        });
+    const neutralize = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.stopImmediatePropagation = () => {};
       }
     };
 
-    const onUp = (e: PointerEvent) => {
-      pointers.delete(e.pointerId);
-    };
-
-    el.addEventListener('pointerdown', onDown);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onUp);
+    el.addEventListener('touchstart', neutralize, { capture: true });
+    el.addEventListener('touchmove', neutralize, { capture: true });
 
     return () => {
-      el.removeEventListener('pointerdown', onDown);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('touchstart', neutralize, { capture: true });
+      el.removeEventListener('touchmove', neutralize, { capture: true });
     };
   }, []);
 
