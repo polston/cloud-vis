@@ -71,6 +71,8 @@ export default function SmartEdge({
   // Priority: drag in progress > user override > layout-computed
   const effectiveMidY = dragMidY ?? userMidY ?? layoutMidY;
 
+  const EDGE_BORDER_RADIUS = 5;
+
   const [edgePath, defaultLabelX, defaultLabelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -78,6 +80,7 @@ export default function SmartEdge({
     targetY,
     sourcePosition,
     targetPosition,
+    borderRadius: EDGE_BORDER_RADIUS,
     ...(effectiveMidY !== undefined ? { centerY: effectiveMidY } : {}),
   });
 
