@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useEffect } from 'react';
+import { useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -56,6 +56,47 @@ export default function GraphView() {
   const { fitView } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Allow pinch-to-zoom when the gesture starts on a node.
+  // React Flow's node wrapper captures the first pointer for drag, which
+  // blocks the viewport zoom handler from seeing both pointers. When we
+  // detect multi-touch, release those captures so pinch-to-zoom works.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const pointers = new Set<number>();
+
+    const onDown = (e: PointerEvent) => {
+      pointers.add(e.pointerId);
+      if (pointers.size >= 2) {
+        el.querySelectorAll('.react-flow__node').forEach((node) => {
+          pointers.forEach((id) => {
+            try {
+              (node as HTMLElement).releasePointerCapture(id);
+            } catch {
+              /* already released */
+            }
+          });
+        });
+      }
+    };
+
+    const onUp = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
+  }, []);
 
   useEffect(() => {
     setNodes(layoutedNodes);
@@ -150,7 +191,7 @@ export default function GraphView() {
         )}
       </div>
 
-      <div className="graph-canvas">
+      <div className="graph-canvas" ref={canvasRef}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
