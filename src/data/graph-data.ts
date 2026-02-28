@@ -1,0 +1,535 @@
+import type { CloudNode, CloudEdge } from '../types';
+import { categoryColors } from './providers';
+
+// ─── Helper to build nodes ────────────────────────────────────────────
+function n(
+  id: string,
+  label: string,
+  description: string,
+  provider: 'aws' | 'gcp' | 'azure',
+  category: string,
+  icon: string,
+  opts: { isGroup?: boolean; hasChildren?: boolean } = {}
+): CloudNode {
+  return {
+    id,
+    type: opts.isGroup ? 'cloudGroup' : 'cloudService',
+    position: { x: 0, y: 0 },
+    data: {
+      label,
+      description,
+      provider,
+      category,
+      icon,
+      isGroup: opts.isGroup ?? false,
+      isExpanded: false,
+      hasChildren: opts.hasChildren ?? false,
+      depth: 0,
+      color: categoryColors[category] ?? '#6B7280',
+    },
+  };
+}
+
+function e(source: string, target: string, label?: string): CloudEdge {
+  return {
+    id: `${source}->${target}`,
+    source,
+    target,
+    label,
+    type: 'smoothstep',
+    animated: false,
+    style: { stroke: '#475569', strokeWidth: 1.5 },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TOP LEVEL — Provider overview
+// ═══════════════════════════════════════════════════════════════════════
+export const topLevelNodes: CloudNode[] = [
+  n('aws', 'Amazon Web Services', 'AWS Cloud Platform', 'aws', 'compute', 'Cloud', { isGroup: true, hasChildren: true }),
+  n('gcp', 'Google Cloud Platform', 'GCP Cloud Platform', 'gcp', 'compute', 'Cloud', { isGroup: true, hasChildren: true }),
+  n('azure', 'Microsoft Azure', 'Azure Cloud Platform', 'azure', 'compute', 'Cloud', { isGroup: true, hasChildren: true }),
+];
+
+export const topLevelEdges: CloudEdge[] = [];
+
+// ═══════════════════════════════════════════════════════════════════════
+// AWS — Service categories
+// ═══════════════════════════════════════════════════════════════════════
+export const awsNodes: CloudNode[] = [
+  n('aws-vpc', 'VPC', 'Virtual Private Cloud – isolated network', 'aws', 'networking', 'Network', { isGroup: true, hasChildren: true }),
+  n('aws-iam', 'IAM', 'Identity & Access Management', 'aws', 'security', 'Shield', { isGroup: true, hasChildren: true }),
+  n('aws-eks', 'EKS', 'Elastic Kubernetes Service', 'aws', 'kubernetes', 'Box', { isGroup: true, hasChildren: true }),
+  n('aws-ec2', 'EC2', 'Elastic Compute Cloud', 'aws', 'compute', 'Server', { isGroup: true, hasChildren: true }),
+  n('aws-s3', 'S3', 'Simple Storage Service', 'aws', 'storage', 'HardDrive', { isGroup: true, hasChildren: true }),
+  n('aws-rds', 'RDS', 'Relational Database Service', 'aws', 'database', 'Database', { isGroup: true, hasChildren: true }),
+  n('aws-lambda', 'Lambda', 'Serverless Functions', 'aws', 'serverless', 'Zap', { isGroup: true, hasChildren: true }),
+  n('aws-cloudwatch', 'CloudWatch', 'Monitoring & Observability', 'aws', 'monitoring', 'Activity', { isGroup: true, hasChildren: true }),
+  n('aws-route53', 'Route 53', 'DNS Service', 'aws', 'networking', 'Globe'),
+  n('aws-elb', 'ELB', 'Elastic Load Balancer', 'aws', 'networking', 'GitBranch'),
+  n('aws-sqs', 'SQS', 'Simple Queue Service', 'aws', 'messaging', 'Inbox'),
+  n('aws-sns', 'SNS', 'Simple Notification Service', 'aws', 'messaging', 'Bell'),
+];
+
+export const awsEdges: CloudEdge[] = [
+  e('aws-route53', 'aws-elb', 'DNS'),
+  e('aws-elb', 'aws-eks', 'Traffic'),
+  e('aws-elb', 'aws-ec2', 'Traffic'),
+  e('aws-eks', 'aws-ec2', 'Runs on'),
+  e('aws-ec2', 'aws-vpc', 'Inside'),
+  e('aws-eks', 'aws-vpc', 'Inside'),
+  e('aws-eks', 'aws-iam', 'Auth'),
+  e('aws-ec2', 'aws-s3', 'Read/Write'),
+  e('aws-ec2', 'aws-rds', 'Query'),
+  e('aws-lambda', 'aws-s3', 'Trigger'),
+  e('aws-lambda', 'aws-sqs', 'Poll'),
+  e('aws-sns', 'aws-sqs', 'Fanout'),
+  e('aws-lambda', 'aws-rds', 'Query'),
+  e('aws-cloudwatch', 'aws-ec2', 'Monitors'),
+  e('aws-cloudwatch', 'aws-eks', 'Monitors'),
+  e('aws-cloudwatch', 'aws-lambda', 'Monitors'),
+  e('aws-lambda', 'aws-vpc', 'Inside'),
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// AWS EKS — Kubernetes internals
+// ═══════════════════════════════════════════════════════════════════════
+export const eksNodes: CloudNode[] = [
+  n('eks-control-plane', 'Control Plane', 'Managed by AWS', 'aws', 'control-plane', 'Cpu', { isGroup: true, hasChildren: true }),
+  n('eks-worker-nodes', 'Worker Nodes', 'EC2 instances running pods', 'aws', 'worker-node', 'Server', { isGroup: true, hasChildren: true }),
+  n('eks-networking', 'Cluster Networking', 'VPC CNI & Service Mesh', 'aws', 'networking', 'Network', { isGroup: true, hasChildren: true }),
+];
+
+export const eksEdges: CloudEdge[] = [
+  e('eks-control-plane', 'eks-worker-nodes', 'Manages'),
+  e('eks-networking', 'eks-worker-nodes', 'Connects'),
+  e('eks-networking', 'eks-control-plane', 'Connects'),
+];
+
+// ─── EKS Control Plane ────────────────────────────────────────────────
+export const eksControlPlaneNodes: CloudNode[] = [
+  n('cp-api-server', 'API Server', 'kube-apiserver – REST API front-end for the control plane', 'aws', 'control-plane', 'Globe'),
+  n('cp-etcd', 'etcd', 'Distributed key-value store for cluster state', 'aws', 'control-plane', 'Database'),
+  n('cp-scheduler', 'Scheduler', 'kube-scheduler – assigns pods to nodes', 'aws', 'control-plane', 'Calendar'),
+  n('cp-controller-manager', 'Controller Manager', 'kube-controller-manager – runs controllers', 'aws', 'control-plane', 'Settings'),
+  n('cp-cloud-controller', 'Cloud Controller Manager', 'Manages AWS-specific resources (ELB, EBS)', 'aws', 'control-plane', 'Cloud'),
+  n('cp-admission', 'Admission Controllers', 'Validates & mutates API requests', 'aws', 'control-plane', 'ShieldCheck'),
+];
+
+export const eksControlPlaneEdges: CloudEdge[] = [
+  e('cp-api-server', 'cp-etcd', 'Read/Write state'),
+  e('cp-scheduler', 'cp-api-server', 'Watch pods'),
+  e('cp-controller-manager', 'cp-api-server', 'Watch & update'),
+  e('cp-cloud-controller', 'cp-api-server', 'Watch & update'),
+  e('cp-admission', 'cp-api-server', 'Intercept requests'),
+];
+
+// ─── EKS Worker Nodes ─────────────────────────────────────────────────
+export const eksWorkerNodes: CloudNode[] = [
+  n('wn-kubelet', 'Kubelet', 'Node agent – manages pod lifecycle', 'aws', 'worker-node', 'Cpu'),
+  n('wn-kube-proxy', 'kube-proxy', 'Network proxy – maintains network rules', 'aws', 'worker-node', 'Network'),
+  n('wn-container-runtime', 'Container Runtime', 'containerd – runs containers', 'aws', 'worker-node', 'Box'),
+  n('wn-pods', 'Pods', 'Smallest deployable units', 'aws', 'worker-node', 'Layers', { isGroup: true, hasChildren: true }),
+  n('wn-daemonsets', 'DaemonSets', 'One pod per node (monitoring, logging)', 'aws', 'worker-node', 'Copy'),
+  n('wn-node-resources', 'Node Resources', 'CPU, Memory, Storage, GPU', 'aws', 'worker-node', 'BarChart3'),
+];
+
+export const eksWorkerEdges: CloudEdge[] = [
+  e('wn-kubelet', 'wn-container-runtime', 'Manages'),
+  e('wn-container-runtime', 'wn-pods', 'Runs'),
+  e('wn-container-runtime', 'wn-daemonsets', 'Runs'),
+  e('wn-kube-proxy', 'wn-pods', 'Routes to'),
+  e('wn-kubelet', 'wn-node-resources', 'Reports'),
+];
+
+// ─── EKS Networking ───────────────────────────────────────────────────
+export const eksNetworkingNodes: CloudNode[] = [
+  n('net-vpc-cni', 'VPC CNI Plugin', 'Assigns VPC IPs to pods', 'aws', 'networking', 'Network'),
+  n('net-coredns', 'CoreDNS', 'Cluster DNS for service discovery', 'aws', 'networking', 'Globe'),
+  n('net-ingress', 'Ingress Controller', 'ALB Ingress – routes external traffic', 'aws', 'networking', 'ArrowDownToLine'),
+  n('net-services', 'Services', 'ClusterIP, NodePort, LoadBalancer', 'aws', 'networking', 'GitBranch'),
+  n('net-network-policy', 'Network Policies', 'Pod-to-pod traffic rules', 'aws', 'security', 'Shield'),
+];
+
+export const eksNetworkingEdges: CloudEdge[] = [
+  e('net-ingress', 'net-services', 'Routes to'),
+  e('net-services', 'net-coredns', 'Resolves via'),
+  e('net-vpc-cni', 'net-services', 'Provides IPs'),
+  e('net-network-policy', 'net-services', 'Filters'),
+];
+
+// ─── Pod internals ────────────────────────────────────────────────────
+export const podNodes: CloudNode[] = [
+  n('pod-containers', 'Containers', 'Application containers', 'aws', 'containers', 'Box'),
+  n('pod-init-containers', 'Init Containers', 'Run before app containers', 'aws', 'containers', 'PlayCircle'),
+  n('pod-volumes', 'Volumes', 'Shared storage within pod', 'aws', 'storage', 'HardDrive'),
+  n('pod-secrets', 'Secrets', 'Sensitive data (mounted or env)', 'aws', 'security', 'Lock'),
+  n('pod-configmaps', 'ConfigMaps', 'Configuration data', 'aws', 'storage', 'FileText'),
+  n('pod-service-account', 'Service Account', 'Pod identity for RBAC', 'aws', 'security', 'User'),
+  n('pod-probes', 'Health Probes', 'Liveness, Readiness, Startup', 'aws', 'monitoring', 'HeartPulse'),
+  n('pod-resources', 'Resource Limits', 'CPU & memory requests/limits', 'aws', 'compute', 'Gauge'),
+];
+
+export const podEdges: CloudEdge[] = [
+  e('pod-init-containers', 'pod-containers', 'Run before'),
+  e('pod-containers', 'pod-volumes', 'Mount'),
+  e('pod-containers', 'pod-secrets', 'Mount/Env'),
+  e('pod-containers', 'pod-configmaps', 'Mount/Env'),
+  e('pod-containers', 'pod-service-account', 'Identity'),
+  e('pod-probes', 'pod-containers', 'Checks'),
+  e('pod-resources', 'pod-containers', 'Constrains'),
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// AWS sub-service details
+// ═══════════════════════════════════════════════════════════════════════
+export const vpcNodes: CloudNode[] = [
+  n('vpc-subnets', 'Subnets', 'Public & private subnets across AZs', 'aws', 'networking', 'Layers'),
+  n('vpc-igw', 'Internet Gateway', 'Connects VPC to internet', 'aws', 'networking', 'Globe'),
+  n('vpc-nat', 'NAT Gateway', 'Outbound internet for private subnets', 'aws', 'networking', 'ArrowUpRight'),
+  n('vpc-sg', 'Security Groups', 'Instance-level firewall rules', 'aws', 'security', 'Shield'),
+  n('vpc-nacl', 'NACLs', 'Subnet-level firewall rules', 'aws', 'security', 'ShieldCheck'),
+  n('vpc-rt', 'Route Tables', 'Routing rules for subnets', 'aws', 'networking', 'GitBranch'),
+  n('vpc-endpoints', 'VPC Endpoints', 'Private access to AWS services', 'aws', 'networking', 'Link'),
+  n('vpc-peering', 'VPC Peering', 'Connect VPCs together', 'aws', 'networking', 'Link'),
+];
+
+export const vpcEdges: CloudEdge[] = [
+  e('vpc-igw', 'vpc-subnets', 'Public traffic'),
+  e('vpc-nat', 'vpc-subnets', 'Private outbound'),
+  e('vpc-rt', 'vpc-subnets', 'Routes'),
+  e('vpc-sg', 'vpc-subnets', 'Protects'),
+  e('vpc-nacl', 'vpc-subnets', 'Filters'),
+  e('vpc-endpoints', 'vpc-subnets', 'Private access'),
+  e('vpc-peering', 'vpc-subnets', 'Cross-VPC'),
+];
+
+export const iamNodes: CloudNode[] = [
+  n('iam-users', 'Users', 'Human identities', 'aws', 'security', 'User'),
+  n('iam-roles', 'Roles', 'Assumable identities for services', 'aws', 'security', 'UserCheck'),
+  n('iam-policies', 'Policies', 'JSON permission documents', 'aws', 'security', 'FileText'),
+  n('iam-groups', 'Groups', 'Collections of users', 'aws', 'security', 'Users'),
+  n('iam-mfa', 'MFA', 'Multi-factor authentication', 'aws', 'security', 'ShieldCheck'),
+  n('iam-sts', 'STS', 'Security Token Service', 'aws', 'security', 'Key'),
+];
+
+export const iamEdges: CloudEdge[] = [
+  e('iam-users', 'iam-groups', 'Belong to'),
+  e('iam-policies', 'iam-users', 'Attached to'),
+  e('iam-policies', 'iam-roles', 'Attached to'),
+  e('iam-policies', 'iam-groups', 'Attached to'),
+  e('iam-mfa', 'iam-users', 'Protects'),
+  e('iam-sts', 'iam-roles', 'Issues tokens'),
+];
+
+export const ec2Nodes: CloudNode[] = [
+  n('ec2-instances', 'Instances', 'Virtual servers', 'aws', 'compute', 'Server'),
+  n('ec2-ami', 'AMIs', 'Machine images', 'aws', 'compute', 'Image'),
+  n('ec2-asg', 'Auto Scaling Groups', 'Automatic scaling', 'aws', 'compute', 'Maximize'),
+  n('ec2-ebs', 'EBS Volumes', 'Block storage', 'aws', 'storage', 'HardDrive'),
+  n('ec2-sg', 'Security Groups', 'Instance firewalls', 'aws', 'security', 'Shield'),
+  n('ec2-keypairs', 'Key Pairs', 'SSH access', 'aws', 'security', 'Key'),
+];
+
+export const ec2Edges: CloudEdge[] = [
+  e('ec2-ami', 'ec2-instances', 'Launches'),
+  e('ec2-asg', 'ec2-instances', 'Manages'),
+  e('ec2-ebs', 'ec2-instances', 'Attached to'),
+  e('ec2-sg', 'ec2-instances', 'Protects'),
+  e('ec2-keypairs', 'ec2-instances', 'SSH access'),
+];
+
+export const s3Nodes: CloudNode[] = [
+  n('s3-buckets', 'Buckets', 'Object storage containers', 'aws', 'storage', 'FolderOpen'),
+  n('s3-objects', 'Objects', 'Files and data', 'aws', 'storage', 'File'),
+  n('s3-versioning', 'Versioning', 'Object version history', 'aws', 'storage', 'History'),
+  n('s3-lifecycle', 'Lifecycle Rules', 'Auto-transition storage classes', 'aws', 'storage', 'RefreshCw'),
+  n('s3-encryption', 'Encryption', 'Server-side encryption', 'aws', 'security', 'Lock'),
+  n('s3-policies', 'Bucket Policies', 'Access control', 'aws', 'security', 'FileText'),
+];
+
+export const s3Edges: CloudEdge[] = [
+  e('s3-buckets', 's3-objects', 'Contains'),
+  e('s3-versioning', 's3-objects', 'Tracks'),
+  e('s3-lifecycle', 's3-objects', 'Manages'),
+  e('s3-encryption', 's3-objects', 'Encrypts'),
+  e('s3-policies', 's3-buckets', 'Controls'),
+];
+
+export const rdsNodes: CloudNode[] = [
+  n('rds-instances', 'DB Instances', 'Database servers', 'aws', 'database', 'Database'),
+  n('rds-replicas', 'Read Replicas', 'Read scaling', 'aws', 'database', 'Copy'),
+  n('rds-multi-az', 'Multi-AZ', 'High availability', 'aws', 'database', 'Shield'),
+  n('rds-snapshots', 'Snapshots', 'Backup & restore', 'aws', 'database', 'Camera'),
+  n('rds-pg', 'Parameter Groups', 'DB configuration', 'aws', 'database', 'Settings'),
+  n('rds-subnet-group', 'Subnet Groups', 'Network placement', 'aws', 'networking', 'Network'),
+];
+
+export const rdsEdges: CloudEdge[] = [
+  e('rds-instances', 'rds-replicas', 'Replicates to'),
+  e('rds-multi-az', 'rds-instances', 'Failover'),
+  e('rds-snapshots', 'rds-instances', 'Backs up'),
+  e('rds-pg', 'rds-instances', 'Configures'),
+  e('rds-subnet-group', 'rds-instances', 'Network'),
+];
+
+export const lambdaNodes: CloudNode[] = [
+  n('lambda-functions', 'Functions', 'Serverless code', 'aws', 'serverless', 'Zap'),
+  n('lambda-layers', 'Layers', 'Shared code/libraries', 'aws', 'serverless', 'Layers'),
+  n('lambda-triggers', 'Event Sources', 'API GW, S3, SQS, etc.', 'aws', 'serverless', 'ArrowDownToLine'),
+  n('lambda-destinations', 'Destinations', 'Success/failure routing', 'aws', 'serverless', 'ArrowUpRight'),
+  n('lambda-concurrency', 'Concurrency', 'Scaling controls', 'aws', 'serverless', 'Maximize'),
+  n('lambda-versions', 'Versions & Aliases', 'Deployment management', 'aws', 'serverless', 'GitBranch'),
+];
+
+export const lambdaEdges: CloudEdge[] = [
+  e('lambda-triggers', 'lambda-functions', 'Invokes'),
+  e('lambda-layers', 'lambda-functions', 'Included in'),
+  e('lambda-functions', 'lambda-destinations', 'Routes to'),
+  e('lambda-concurrency', 'lambda-functions', 'Controls'),
+  e('lambda-versions', 'lambda-functions', 'Manages'),
+];
+
+export const cloudwatchNodes: CloudNode[] = [
+  n('cw-metrics', 'Metrics', 'Time-series data', 'aws', 'monitoring', 'BarChart3'),
+  n('cw-alarms', 'Alarms', 'Threshold-based alerts', 'aws', 'monitoring', 'Bell'),
+  n('cw-logs', 'Logs', 'Log aggregation', 'aws', 'monitoring', 'FileText'),
+  n('cw-dashboards', 'Dashboards', 'Visualization', 'aws', 'monitoring', 'LayoutDashboard'),
+  n('cw-events', 'EventBridge', 'Event-driven automation', 'aws', 'monitoring', 'Zap'),
+];
+
+export const cloudwatchEdges: CloudEdge[] = [
+  e('cw-metrics', 'cw-alarms', 'Triggers'),
+  e('cw-metrics', 'cw-dashboards', 'Displayed on'),
+  e('cw-logs', 'cw-metrics', 'Filters to'),
+  e('cw-alarms', 'cw-events', 'Triggers'),
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// GCP — Service categories
+// ═══════════════════════════════════════════════════════════════════════
+export const gcpNodes: CloudNode[] = [
+  n('gcp-vpc', 'VPC Network', 'Global virtual network', 'gcp', 'networking', 'Network', { isGroup: true, hasChildren: true }),
+  n('gcp-iam', 'Cloud IAM', 'Identity & Access Management', 'gcp', 'security', 'Shield', { isGroup: true, hasChildren: true }),
+  n('gcp-gke', 'GKE', 'Google Kubernetes Engine', 'gcp', 'kubernetes', 'Box', { isGroup: true, hasChildren: true }),
+  n('gcp-gce', 'Compute Engine', 'Virtual Machines', 'gcp', 'compute', 'Server', { isGroup: true, hasChildren: true }),
+  n('gcp-gcs', 'Cloud Storage', 'Object Storage', 'gcp', 'storage', 'HardDrive', { isGroup: true, hasChildren: true }),
+  n('gcp-cloudsql', 'Cloud SQL', 'Managed Relational DB', 'gcp', 'database', 'Database', { isGroup: true, hasChildren: true }),
+  n('gcp-functions', 'Cloud Functions', 'Serverless Functions', 'gcp', 'serverless', 'Zap', { isGroup: true, hasChildren: true }),
+  n('gcp-monitoring', 'Cloud Monitoring', 'Ops Suite Monitoring', 'gcp', 'monitoring', 'Activity', { isGroup: true, hasChildren: true }),
+  n('gcp-dns', 'Cloud DNS', 'DNS Service', 'gcp', 'networking', 'Globe'),
+  n('gcp-lb', 'Cloud Load Balancing', 'Global Load Balancer', 'gcp', 'networking', 'GitBranch'),
+  n('gcp-pubsub', 'Pub/Sub', 'Messaging Service', 'gcp', 'messaging', 'Inbox'),
+  n('gcp-bigquery', 'BigQuery', 'Data Warehouse', 'gcp', 'database', 'Database'),
+];
+
+export const gcpEdges: CloudEdge[] = [
+  e('gcp-dns', 'gcp-lb', 'DNS'),
+  e('gcp-lb', 'gcp-gke', 'Traffic'),
+  e('gcp-lb', 'gcp-gce', 'Traffic'),
+  e('gcp-gke', 'gcp-gce', 'Runs on'),
+  e('gcp-gce', 'gcp-vpc', 'Inside'),
+  e('gcp-gke', 'gcp-vpc', 'Inside'),
+  e('gcp-gke', 'gcp-iam', 'Auth'),
+  e('gcp-gce', 'gcp-gcs', 'Read/Write'),
+  e('gcp-gce', 'gcp-cloudsql', 'Query'),
+  e('gcp-functions', 'gcp-gcs', 'Trigger'),
+  e('gcp-functions', 'gcp-pubsub', 'Subscribe'),
+  e('gcp-functions', 'gcp-cloudsql', 'Query'),
+  e('gcp-monitoring', 'gcp-gce', 'Monitors'),
+  e('gcp-monitoring', 'gcp-gke', 'Monitors'),
+  e('gcp-monitoring', 'gcp-functions', 'Monitors'),
+  e('gcp-functions', 'gcp-vpc', 'Inside'),
+  e('gcp-pubsub', 'gcp-bigquery', 'Streams to'),
+];
+
+// ─── GKE internals ────────────────────────────────────────────────────
+export const gkeNodes: CloudNode[] = [
+  n('gke-control-plane', 'Control Plane', 'Managed by Google', 'gcp', 'control-plane', 'Cpu', { isGroup: true, hasChildren: true }),
+  n('gke-node-pools', 'Node Pools', 'Groups of worker VMs', 'gcp', 'worker-node', 'Server', { isGroup: true, hasChildren: true }),
+  n('gke-networking', 'Cluster Networking', 'VPC-native networking', 'gcp', 'networking', 'Network', { isGroup: true, hasChildren: true }),
+];
+
+export const gkeEdges: CloudEdge[] = [
+  e('gke-control-plane', 'gke-node-pools', 'Manages'),
+  e('gke-networking', 'gke-node-pools', 'Connects'),
+  e('gke-networking', 'gke-control-plane', 'Connects'),
+];
+
+export const gkeControlPlaneNodes: CloudNode[] = [
+  n('gke-cp-api', 'API Server', 'kube-apiserver', 'gcp', 'control-plane', 'Globe'),
+  n('gke-cp-etcd', 'etcd', 'Cluster state store', 'gcp', 'control-plane', 'Database'),
+  n('gke-cp-scheduler', 'Scheduler', 'Pod scheduling', 'gcp', 'control-plane', 'Calendar'),
+  n('gke-cp-controller', 'Controller Manager', 'Reconciliation loops', 'gcp', 'control-plane', 'Settings'),
+  n('gke-cp-cloud-controller', 'Cloud Controller', 'GCP resource management', 'gcp', 'control-plane', 'Cloud'),
+];
+
+export const gkeControlPlaneEdges: CloudEdge[] = [
+  e('gke-cp-api', 'gke-cp-etcd', 'Read/Write'),
+  e('gke-cp-scheduler', 'gke-cp-api', 'Watch'),
+  e('gke-cp-controller', 'gke-cp-api', 'Watch & update'),
+  e('gke-cp-cloud-controller', 'gke-cp-api', 'Watch & update'),
+];
+
+export const gkeNodePoolNodes: CloudNode[] = [
+  n('gke-np-kubelet', 'Kubelet', 'Node agent', 'gcp', 'worker-node', 'Cpu'),
+  n('gke-np-proxy', 'kube-proxy', 'Network proxy', 'gcp', 'worker-node', 'Network'),
+  n('gke-np-runtime', 'Container Runtime', 'containerd', 'gcp', 'worker-node', 'Box'),
+  n('gke-np-pods', 'Pods', 'Application workloads', 'gcp', 'worker-node', 'Layers'),
+];
+
+export const gkeNodePoolEdges: CloudEdge[] = [
+  e('gke-np-kubelet', 'gke-np-runtime', 'Manages'),
+  e('gke-np-runtime', 'gke-np-pods', 'Runs'),
+  e('gke-np-proxy', 'gke-np-pods', 'Routes to'),
+];
+
+export const gkeNetworkingNodes: CloudNode[] = [
+  n('gke-net-vpc-native', 'VPC-Native', 'Alias IP ranges for pods', 'gcp', 'networking', 'Network'),
+  n('gke-net-dns', 'kube-dns', 'Cluster DNS', 'gcp', 'networking', 'Globe'),
+  n('gke-net-ingress', 'GKE Ingress', 'Google Cloud Load Balancer', 'gcp', 'networking', 'ArrowDownToLine'),
+  n('gke-net-services', 'Services', 'ClusterIP, NodePort, LoadBalancer', 'gcp', 'networking', 'GitBranch'),
+];
+
+export const gkeNetworkingEdges: CloudEdge[] = [
+  e('gke-net-ingress', 'gke-net-services', 'Routes to'),
+  e('gke-net-services', 'gke-net-dns', 'Resolves via'),
+  e('gke-net-vpc-native', 'gke-net-services', 'Provides IPs'),
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// Azure — Service categories
+// ═══════════════════════════════════════════════════════════════════════
+export const azureNodes: CloudNode[] = [
+  n('az-vnet', 'Virtual Network', 'VNet – isolated network', 'azure', 'networking', 'Network', { isGroup: true, hasChildren: true }),
+  n('az-ad', 'Entra ID', 'Identity & Access (Azure AD)', 'azure', 'security', 'Shield', { isGroup: true, hasChildren: true }),
+  n('az-aks', 'AKS', 'Azure Kubernetes Service', 'azure', 'kubernetes', 'Box', { isGroup: true, hasChildren: true }),
+  n('az-vm', 'Virtual Machines', 'Azure VMs', 'azure', 'compute', 'Server', { isGroup: true, hasChildren: true }),
+  n('az-blob', 'Blob Storage', 'Object Storage', 'azure', 'storage', 'HardDrive', { isGroup: true, hasChildren: true }),
+  n('az-sql', 'Azure SQL', 'Managed SQL Database', 'azure', 'database', 'Database', { isGroup: true, hasChildren: true }),
+  n('az-functions', 'Azure Functions', 'Serverless Compute', 'azure', 'serverless', 'Zap', { isGroup: true, hasChildren: true }),
+  n('az-monitor', 'Azure Monitor', 'Monitoring & Diagnostics', 'azure', 'monitoring', 'Activity', { isGroup: true, hasChildren: true }),
+  n('az-dns', 'Azure DNS', 'DNS Service', 'azure', 'networking', 'Globe'),
+  n('az-lb', 'Load Balancer', 'Azure Load Balancer', 'azure', 'networking', 'GitBranch'),
+  n('az-servicebus', 'Service Bus', 'Messaging Service', 'azure', 'messaging', 'Inbox'),
+  n('az-cosmos', 'Cosmos DB', 'Multi-model NoSQL', 'azure', 'database', 'Database'),
+];
+
+export const azureEdges: CloudEdge[] = [
+  e('az-dns', 'az-lb', 'DNS'),
+  e('az-lb', 'az-aks', 'Traffic'),
+  e('az-lb', 'az-vm', 'Traffic'),
+  e('az-aks', 'az-vm', 'Runs on'),
+  e('az-vm', 'az-vnet', 'Inside'),
+  e('az-aks', 'az-vnet', 'Inside'),
+  e('az-aks', 'az-ad', 'Auth'),
+  e('az-vm', 'az-blob', 'Read/Write'),
+  e('az-vm', 'az-sql', 'Query'),
+  e('az-functions', 'az-blob', 'Trigger'),
+  e('az-functions', 'az-servicebus', 'Subscribe'),
+  e('az-functions', 'az-sql', 'Query'),
+  e('az-monitor', 'az-vm', 'Monitors'),
+  e('az-monitor', 'az-aks', 'Monitors'),
+  e('az-monitor', 'az-functions', 'Monitors'),
+  e('az-functions', 'az-vnet', 'Inside'),
+  e('az-cosmos', 'az-vnet', 'Inside'),
+];
+
+// ─── AKS internals ────────────────────────────────────────────────────
+export const aksNodes: CloudNode[] = [
+  n('aks-control-plane', 'Control Plane', 'Managed by Azure', 'azure', 'control-plane', 'Cpu', { isGroup: true, hasChildren: true }),
+  n('aks-node-pools', 'Node Pools', 'VMSS-backed worker nodes', 'azure', 'worker-node', 'Server', { isGroup: true, hasChildren: true }),
+  n('aks-networking', 'Cluster Networking', 'Azure CNI / Kubenet', 'azure', 'networking', 'Network', { isGroup: true, hasChildren: true }),
+];
+
+export const aksEdges: CloudEdge[] = [
+  e('aks-control-plane', 'aks-node-pools', 'Manages'),
+  e('aks-networking', 'aks-node-pools', 'Connects'),
+  e('aks-networking', 'aks-control-plane', 'Connects'),
+];
+
+export const aksControlPlaneNodes: CloudNode[] = [
+  n('aks-cp-api', 'API Server', 'kube-apiserver', 'azure', 'control-plane', 'Globe'),
+  n('aks-cp-etcd', 'etcd', 'Cluster state store', 'azure', 'control-plane', 'Database'),
+  n('aks-cp-scheduler', 'Scheduler', 'Pod scheduling', 'azure', 'control-plane', 'Calendar'),
+  n('aks-cp-controller', 'Controller Manager', 'Reconciliation loops', 'azure', 'control-plane', 'Settings'),
+  n('aks-cp-cloud-controller', 'Cloud Controller', 'Azure resource management', 'azure', 'control-plane', 'Cloud'),
+];
+
+export const aksControlPlaneEdges: CloudEdge[] = [
+  e('aks-cp-api', 'aks-cp-etcd', 'Read/Write'),
+  e('aks-cp-scheduler', 'aks-cp-api', 'Watch'),
+  e('aks-cp-controller', 'aks-cp-api', 'Watch & update'),
+  e('aks-cp-cloud-controller', 'aks-cp-api', 'Watch & update'),
+];
+
+export const aksNodePoolNodes: CloudNode[] = [
+  n('aks-np-kubelet', 'Kubelet', 'Node agent', 'azure', 'worker-node', 'Cpu'),
+  n('aks-np-proxy', 'kube-proxy', 'Network proxy', 'azure', 'worker-node', 'Network'),
+  n('aks-np-runtime', 'Container Runtime', 'containerd', 'azure', 'worker-node', 'Box'),
+  n('aks-np-pods', 'Pods', 'Application workloads', 'azure', 'worker-node', 'Layers'),
+];
+
+export const aksNodePoolEdges: CloudEdge[] = [
+  e('aks-np-kubelet', 'aks-np-runtime', 'Manages'),
+  e('aks-np-runtime', 'aks-np-pods', 'Runs'),
+  e('aks-np-proxy', 'aks-np-pods', 'Routes to'),
+];
+
+export const aksNetworkingNodes: CloudNode[] = [
+  n('aks-net-cni', 'Azure CNI', 'VNet IPs for pods', 'azure', 'networking', 'Network'),
+  n('aks-net-dns', 'CoreDNS', 'Cluster DNS', 'azure', 'networking', 'Globe'),
+  n('aks-net-ingress', 'AGIC', 'Application Gateway Ingress', 'azure', 'networking', 'ArrowDownToLine'),
+  n('aks-net-services', 'Services', 'ClusterIP, NodePort, LoadBalancer', 'azure', 'networking', 'GitBranch'),
+];
+
+export const aksNetworkingEdges: CloudEdge[] = [
+  e('aks-net-ingress', 'aks-net-services', 'Routes to'),
+  e('aks-net-services', 'aks-net-dns', 'Resolves via'),
+  e('aks-net-cni', 'aks-net-services', 'Provides IPs'),
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// Graph Registry — maps node IDs to their drill-down content
+// ═══════════════════════════════════════════════════════════════════════
+export interface GraphLevel {
+  label: string;
+  description: string;
+  nodes: CloudNode[];
+  edges: CloudEdge[];
+}
+
+export const graphRegistry: Record<string, GraphLevel> = {
+  root: { label: 'Cloud Providers', description: 'Multi-cloud overview', nodes: topLevelNodes, edges: topLevelEdges },
+
+  // AWS
+  aws: { label: 'AWS', description: 'Amazon Web Services', nodes: awsNodes, edges: awsEdges },
+  'aws-vpc': { label: 'VPC', description: 'Virtual Private Cloud', nodes: vpcNodes, edges: vpcEdges },
+  'aws-iam': { label: 'IAM', description: 'Identity & Access Management', nodes: iamNodes, edges: iamEdges },
+  'aws-eks': { label: 'EKS', description: 'Elastic Kubernetes Service', nodes: eksNodes, edges: eksEdges },
+  'aws-ec2': { label: 'EC2', description: 'Elastic Compute Cloud', nodes: ec2Nodes, edges: ec2Edges },
+  'aws-s3': { label: 'S3', description: 'Simple Storage Service', nodes: s3Nodes, edges: s3Edges },
+  'aws-rds': { label: 'RDS', description: 'Relational Database Service', nodes: rdsNodes, edges: rdsEdges },
+  'aws-lambda': { label: 'Lambda', description: 'Serverless Functions', nodes: lambdaNodes, edges: lambdaEdges },
+  'aws-cloudwatch': { label: 'CloudWatch', description: 'Monitoring & Observability', nodes: cloudwatchNodes, edges: cloudwatchEdges },
+
+  // EKS deep-dive
+  'eks-control-plane': { label: 'EKS Control Plane', description: 'Kubernetes control plane components', nodes: eksControlPlaneNodes, edges: eksControlPlaneEdges },
+  'eks-worker-nodes': { label: 'Worker Nodes', description: 'EC2 instances running pods', nodes: eksWorkerNodes, edges: eksWorkerEdges },
+  'eks-networking': { label: 'Cluster Networking', description: 'VPC CNI & service networking', nodes: eksNetworkingNodes, edges: eksNetworkingEdges },
+  'wn-pods': { label: 'Pods', description: 'Pod internals', nodes: podNodes, edges: podEdges },
+
+  // GCP
+  gcp: { label: 'GCP', description: 'Google Cloud Platform', nodes: gcpNodes, edges: gcpEdges },
+  'gcp-gke': { label: 'GKE', description: 'Google Kubernetes Engine', nodes: gkeNodes, edges: gkeEdges },
+  'gke-control-plane': { label: 'GKE Control Plane', description: 'Kubernetes control plane', nodes: gkeControlPlaneNodes, edges: gkeControlPlaneEdges },
+  'gke-node-pools': { label: 'Node Pools', description: 'Worker VM groups', nodes: gkeNodePoolNodes, edges: gkeNodePoolEdges },
+  'gke-networking': { label: 'GKE Networking', description: 'VPC-native networking', nodes: gkeNetworkingNodes, edges: gkeNetworkingEdges },
+
+  // Azure
+  azure: { label: 'Azure', description: 'Microsoft Azure', nodes: azureNodes, edges: azureEdges },
+  'az-aks': { label: 'AKS', description: 'Azure Kubernetes Service', nodes: aksNodes, edges: aksEdges },
+  'aks-control-plane': { label: 'AKS Control Plane', description: 'Kubernetes control plane', nodes: aksControlPlaneNodes, edges: aksControlPlaneEdges },
+  'aks-node-pools': { label: 'Node Pools', description: 'VMSS worker nodes', nodes: aksNodePoolNodes, edges: aksNodePoolEdges },
+  'aks-networking': { label: 'AKS Networking', description: 'Azure CNI networking', nodes: aksNetworkingNodes, edges: aksNetworkingEdges },
+};
