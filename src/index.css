@@ -254,8 +254,8 @@ body {
 }
 
 .react-flow__edge-path {
-  stroke: #334155 !important;
-  stroke-width: 1.5 !important;
+  stroke-width: 1.5;
+  transition: filter 0.15s ease;
 }
 
 .react-flow__edge-text {
@@ -268,8 +268,8 @@ body {
 }
 
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: #64748B !important;
-  stroke-width: 2 !important;
+  stroke-width: 2.5 !important;
+  filter: brightness(1.4);
 }
 
 /* Controls */
@@ -705,18 +705,7 @@ body {
   color: var(--gw-color);
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   Cross-zone edges
-   ═══════════════════════════════════════════════════════════════ */
-.cross-zone-edge .react-flow__edge-path {
-  stroke: #F59E0B !important;
-  stroke-width: 2 !important;
-  stroke-dasharray: 6 3 !important;
-}
-
-.cross-zone-edge .react-flow__edge-text {
-  fill: #F59E0B !important;
-}
+/* Cross-zone edges are styled via inline props (dashed + animated) */
 
 /* ═══════════════════════════════════════════════════════════════
    Header layout tweaks
@@ -781,6 +770,19 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.legend-section-title {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+.legend-section-gap {
+  margin-top: 4px;
 }
 
 .legend-line {

@@ -4,6 +4,7 @@ import { graphRegistry } from '../data/graph-data';
 import { getLayoutedElements } from '../utils/layout';
 import { flattenGraph, buildNodeParentMap, isCrossZoneEdge } from '../utils/graph-flattener';
 import { getZoneLayoutedElements } from '../utils/zone-layout';
+import { applyEdgeStyle } from '../utils/edge-styles';
 import type { BreadcrumbItem, CloudNode, CloudEdge } from '../types';
 
 export const MAX_HIERARCHY_DEPTH = 5;
@@ -65,9 +66,13 @@ export function useGraphNavigation() {
     if (viewMode !== 'explorer') return { nodes: [] as CloudNode[], edges: [] as CloudEdge[] };
     const level = graphRegistry[currentLevel];
     if (!level) return { nodes: [] as CloudNode[], edges: [] as CloudEdge[] };
-    return getLayoutedElements(level.nodes, level.edges, 'TB') as {
+    const layouted = getLayoutedElements(level.nodes, level.edges, 'TB') as {
       nodes: CloudNode[];
       edges: CloudEdge[];
+    };
+    return {
+      nodes: layouted.nodes,
+      edges: layouted.edges.map(applyEdgeStyle) as CloudEdge[],
     };
   }, [currentLevel, viewMode]);
 
@@ -77,18 +82,22 @@ export function useGraphNavigation() {
     const { nodes: flatNodes, edges: flatEdges } = flattenGraph(zoneDepth, collapsedZones);
     const layouted = getZoneLayoutedElements(flatNodes, flatEdges);
 
-    // Style cross-zone edges
+    // Apply semantic edge colors, then overlay cross-zone dashed indicator
     const nodeParentMap = buildNodeParentMap(layouted.nodes);
     const styledEdges = layouted.edges.map((edge) => {
+      const styled = applyEdgeStyle(edge);
       if (isCrossZoneEdge(edge, nodeParentMap)) {
         return {
-          ...edge,
-          style: { stroke: '#F59E0B', strokeWidth: 2, strokeDasharray: '6 3' },
-          className: 'cross-zone-edge',
+          ...styled,
+          style: {
+            ...(styled.style as Record<string, unknown>),
+            strokeWidth: 2,
+            strokeDasharray: '6 3',
+          },
           animated: true,
         };
       }
-      return edge;
+      return styled;
     });
 
     return { nodes: layouted.nodes, edges: styledEdges };
