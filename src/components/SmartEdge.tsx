@@ -66,6 +66,7 @@ export default function SmartEdge({
   const [dragMidY, setDragMidY] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ startY: number; startMidY: number } | null>(null);
+  const activePointersRef = useRef<Set<number>>(new Set());
   const { setEdges } = useReactFlow();
 
   // Priority: drag in progress > user override > layout-computed
@@ -99,6 +100,24 @@ export default function SmartEdge({
   const hSegMaxX = Math.max(sourceX, targetX);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
+    activePointersRef.current.add(e.pointerId);
+
+    // Multi-touch detected: let React Flow handle pinch-to-zoom
+    if (activePointersRef.current.size > 1) {
+      if (dragStartRef.current) {
+        try {
+          (e.target as HTMLElement).releasePointerCapture(
+            [...activePointersRef.current][0]
+          );
+        } catch { /* already released */ }
+        dragStartRef.current = null;
+        setIsDragging(false);
+        setDragMidY(null);
+      }
+      return;
+    }
+
+    // Single touch: begin edge drag
     e.stopPropagation();
     e.preventDefault();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -108,13 +127,29 @@ export default function SmartEdge({
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragStartRef.current) return;
+
+    // Second finger appeared mid-drag: cancel drag, let React Flow handle pinch
+    if (activePointersRef.current.size > 1) {
+      try {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch { /* already released */ }
+      dragStartRef.current = null;
+      setIsDragging(false);
+      setDragMidY(null);
+      return;
+    }
+
     const deltaY = e.clientY - dragStartRef.current.startY;
     setDragMidY(dragStartRef.current.startMidY + deltaY);
   }, []);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
+    activePointersRef.current.delete(e.pointerId);
+
     if (!dragStartRef.current) return;
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch { /* already released */ }
     const finalMidY = dragStartRef.current.startMidY + (e.clientY - dragStartRef.current.startY);
     dragStartRef.current = null;
     setIsDragging(false);
@@ -129,6 +164,15 @@ export default function SmartEdge({
       )
     );
   }, [id, setEdges]);
+
+  const onPointerCancel = useCallback((e: React.PointerEvent) => {
+    activePointersRef.current.delete(e.pointerId);
+    if (dragStartRef.current) {
+      dragStartRef.current = null;
+      setIsDragging(false);
+      setDragMidY(null);
+    }
+  }, []);
 
   const onDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -167,6 +211,7 @@ export default function SmartEdge({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onDoubleClick={onDoubleClick}
       />
     </>
