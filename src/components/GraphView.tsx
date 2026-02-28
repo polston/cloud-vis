@@ -78,14 +78,9 @@ export default function GraphView() {
   const onNodeDoubleClick: NodeMouseHandler = useCallback(
     (_event, node) => {
       if (viewMode === 'zone') {
-        // In zone mode, double-click toggles expand/collapse
+        // In zone mode, double-click toggles expand/collapse only on zone containers
         if (node.type === 'zoneContainer') {
           toggleZoneCollapse(node.id);
-        } else {
-          const data = node.data as unknown as CloudNodeData;
-          if (data.hasChildren && graphRegistry[node.id]) {
-            toggleZoneCollapse(node.id);
-          }
         }
       } else {
         // Explorer mode: drill down
@@ -196,7 +191,8 @@ export default function GraphView() {
         nodeData={selectedNodeData}
         nodeId={selectedNodeId}
         onClose={() => selectNode(null)}
-        onDrillDown={viewMode === 'zone' ? toggleZoneCollapse : navigateTo}
+        onDrillDown={navigateTo}
+        showDrillDown={viewMode === 'explorer'}
       />
 
       {isZoneMode && (

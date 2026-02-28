@@ -8,9 +8,10 @@ interface InfoPanelProps {
   nodeId: string | null;
   onClose: () => void;
   onDrillDown: (id: string) => void;
+  showDrillDown?: boolean;
 }
 
-export default function InfoPanel({ nodeData, nodeId, onClose, onDrillDown }: InfoPanelProps) {
+export default function InfoPanel({ nodeData, nodeId, onClose, onDrillDown, showDrillDown = true }: InfoPanelProps) {
   if (!nodeData || !nodeId) return null;
 
   const provider = providers[nodeData.provider];
@@ -43,7 +44,7 @@ export default function InfoPanel({ nodeData, nodeId, onClose, onDrillDown }: In
             {nodeData.category}
           </span>
         </div>
-        {nodeData.hasChildren && (
+        {showDrillDown && nodeData.hasChildren && (
           <button
             className="info-panel-drill-btn"
             onClick={() => onDrillDown(nodeId)}
