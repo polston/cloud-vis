@@ -55,7 +55,7 @@ export function useGraphNavigation() {
   const [viewMode, setViewMode] = useState<ViewMode>('zone');
   const [currentLevel, setCurrentLevel] = useState('root');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [zoneDepth, setZoneDepth] = useState(2);
+  const [zoneDepth, setZoneDepth] = useState(MAX_HIERARCHY_DEPTH);
   const [collapsedZones, setCollapsedZones] = useState<Set<string>>(new Set());
 
   const breadcrumb = useMemo(() => buildBreadcrumb(currentLevel), [currentLevel]);
