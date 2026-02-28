@@ -16,6 +16,7 @@ function buildBreadcrumb(nodeId: string): BreadcrumbItem[] {
     // AWS
     'aws-vpc': 'aws', 'aws-iam': 'aws', 'aws-eks': 'aws', 'aws-ec2': 'aws',
     'aws-s3': 'aws', 'aws-rds': 'aws', 'aws-lambda': 'aws', 'aws-cloudwatch': 'aws',
+    'aws-route53': 'aws', 'aws-elb': 'aws', 'aws-sqs': 'aws', 'aws-sns': 'aws',
     // EKS
     'eks-control-plane': 'aws-eks', 'eks-worker-nodes': 'aws-eks', 'eks-networking': 'aws-eks',
     'wn-pods': 'eks-worker-nodes',
