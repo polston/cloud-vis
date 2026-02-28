@@ -200,8 +200,8 @@ export default function GraphView() {
 
       <div className="graph-hint">
         {isZoneMode
-          ? 'Double-click zones to expand/collapse \u00b7 Drag edges to reposition \u00b7 Scroll to zoom'
-          : 'Double-click a group to drill down \u00b7 Drag edges to reposition \u00b7 Click to inspect'}
+          ? 'Double-click zones to expand/collapse \u00b7 Drag edges to reposition \u00b7 Scroll or pinch to zoom'
+          : 'Double-click a group to drill down \u00b7 Drag edges to reposition \u00b7 Pinch or scroll to zoom'}
       </div>
     </div>
   );
