@@ -59,26 +59,61 @@ export default function GraphView() {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Allow pinch-to-zoom when the gesture starts on a node.
-  // d3-drag on node elements calls stopImmediatePropagation() on touch
-  // events, preventing them from reaching d3-zoom on the viewport for
-  // pinch-to-zoom. Intercept in the capture phase (fires before bubble)
-  // and neutralize stopImmediatePropagation for multi-touch gestures.
+  //
+  // Two issues block multi-touch zoom on nodes:
+  //
+  // 1) d3-drag on `.react-flow__node` calls stopImmediatePropagation()
+  //    on touch events, preventing them from bubbling to d3-zoom on the
+  //    renderer. We neutralize this in the capture phase for multi-touch.
+  //
+  // 2) React Flow adds the `nopan` class to draggable nodes. d3-zoom's
+  //    filter (createFilter) checks event.target.closest('.nopan') and
+  //    rejects matching events — including multi-touch pinch gestures.
+  //    We temporarily remove `nopan` during multi-touch touchstart so
+  //    the filter lets the pinch through.
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
 
-    const neutralize = (e: TouchEvent) => {
-      if (e.touches.length >= 2) {
-        e.stopImmediatePropagation = () => {};
+    let pinching = false;
+
+    const handler = (e: TouchEvent) => {
+      if (e.touches.length >= 2 && !pinching) {
+        pinching = true;
+      }
+
+      if (!pinching) return;
+
+      // (1) Neutralize stopImmediatePropagation so event reaches d3-zoom
+      e.stopImmediatePropagation = () => {};
+
+      // (2) On touchstart, temporarily strip the nopan class so d3-zoom's
+      //     filter accepts the event. Restore it asynchronously after all
+      //     handlers have run.
+      if (e.type === 'touchstart') {
+        const target = e.target as HTMLElement;
+        const nopanEl = target.closest('.nopan') as HTMLElement | null;
+        if (nopanEl) {
+          nopanEl.classList.remove('nopan');
+          setTimeout(() => nopanEl.classList.add('nopan'), 0);
+        }
+      }
+
+      if (e.touches.length === 0) {
+        pinching = false;
       }
     };
 
-    el.addEventListener('touchstart', neutralize, { capture: true });
-    el.addEventListener('touchmove', neutralize, { capture: true });
+    el.addEventListener('touchstart', handler, { capture: true });
+    el.addEventListener('touchmove', handler, { capture: true });
+    el.addEventListener('touchend', handler, { capture: true });
+    el.addEventListener('touchcancel', handler, { capture: true });
 
     return () => {
-      el.removeEventListener('touchstart', neutralize, { capture: true });
-      el.removeEventListener('touchmove', neutralize, { capture: true });
+      el.removeEventListener('touchstart', handler, { capture: true });
+      el.removeEventListener('touchmove', handler, { capture: true });
+      el.removeEventListener('touchend', handler, { capture: true });
+      el.removeEventListener('touchcancel', handler, { capture: true });
     };
   }, []);
 
