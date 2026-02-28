@@ -7,6 +7,7 @@ import {
   BackgroundVariant,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -36,6 +37,7 @@ export default function GraphView() {
     selectNode,
   } = useGraphNavigation();
 
+  const { fitView } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
@@ -44,6 +46,15 @@ export default function GraphView() {
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
   }, [layoutedNodes, layoutedEdges, setNodes, setEdges]);
+
+  // Center and fit the graph after navigating to a new level
+  useEffect(() => {
+    // Wait for nodes to render before fitting the view
+    const timeoutId = setTimeout(() => {
+      fitView({ padding: 0.2, duration: 300 });
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [layoutedNodes, fitView]);
 
   const selectedNodeData = useMemo(() => {
     if (!selectedNodeId) return null;
