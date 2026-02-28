@@ -14,6 +14,7 @@ import '@xyflow/react/dist/style.css';
 
 import CloudServiceNode from './CloudServiceNode';
 import CloudGroupNode from './CloudGroupNode';
+import SmartEdge from './SmartEdge';
 import Breadcrumb from './Breadcrumb';
 import InfoPanel from './InfoPanel';
 import { useGraphNavigation } from '../hooks/useGraphNavigation';
@@ -24,6 +25,10 @@ import { useEffect } from 'react';
 const nodeTypes = {
   cloudService: CloudServiceNode,
   cloudGroup: CloudGroupNode,
+};
+
+const edgeTypes = {
+  smartEdge: SmartEdge,
 };
 
 export default function GraphView() {
@@ -105,6 +110,7 @@ export default function GraphView() {
           onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           fitViewOptions={{ padding: 0.2 }}
           minZoom={0.3}

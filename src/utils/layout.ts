@@ -152,13 +152,157 @@ export function getLayoutedElements(
     };
   });
 
+  // ── Compute edge path segments for label collision avoidance ──────
+  interface Segment { x1: number; y1: number; x2: number; y2: number }
+
+  // Build a map of node top-left positions for quick lookup
+  const nodeLayoutMap = new Map<string, { x: number; y: number; w: number; h: number }>();
+  for (const node of nodes) {
+    const isGroup = node.data?.isGroup;
+    const w = isGroup ? GROUP_NODE_WIDTH : NODE_WIDTH;
+    const h = isGroup ? GROUP_NODE_HEIGHT : NODE_HEIGHT;
+    const center = nodePositions.get(node.id);
+    if (!center) continue;
+    nodeLayoutMap.set(node.id, {
+      x: center.x - w / 2,
+      y: center.y - h / 2,
+      w,
+      h,
+    });
+  }
+
+  // For each edge, compute the approximate smoothstep path as 3 segments
+  function edgeSegments(edge: Edge): Segment[] {
+    const sn = nodeLayoutMap.get(edge.source);
+    const tn = nodeLayoutMap.get(edge.target);
+    if (!sn || !tn) return [];
+
+    const handles = edgeHandleMap.get(edge.id);
+    const sHandles = nodeSourceHandles.get(edge.source) ?? [];
+    const tHandles = nodeTargetHandles.get(edge.target) ?? [];
+    const sHandle = sHandles.find((h) => h.id === handles?.sourceHandle);
+    const tHandle = tHandles.find((h) => h.id === handles?.targetHandle);
+
+    const sx = sn.x + sn.w * (sHandle?.position ?? 50) / 100;
+    const sy = sn.y + sn.h; // bottom of source
+    const tx = tn.x + tn.w * (tHandle?.position ?? 50) / 100;
+    const ty = tn.y; // top of target
+    const midY = (sy + ty) / 2;
+
+    return [
+      { x1: sx, y1: sy, x2: sx, y2: midY },
+      { x1: sx, y1: midY, x2: tx, y2: midY },
+      { x1: tx, y1: midY, x2: tx, y2: ty },
+    ];
+  }
+
+  // Get a point at parameter t (0-1) along the segments
+  function pointOnPath(segs: Segment[], t: number): { x: number; y: number } {
+    let total = 0;
+    const lens: number[] = [];
+    for (const s of segs) {
+      const l = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+      lens.push(l);
+      total += l;
+    }
+    const dist = t * total;
+    let acc = 0;
+    for (let i = 0; i < segs.length; i++) {
+      if (acc + lens[i] >= dist || i === segs.length - 1) {
+        const st = lens[i] > 0 ? (dist - acc) / lens[i] : 0;
+        return {
+          x: segs[i].x1 + st * (segs[i].x2 - segs[i].x1),
+          y: segs[i].y1 + st * (segs[i].y2 - segs[i].y1),
+        };
+      }
+      acc += lens[i];
+    }
+    return { x: segs[0].x1, y: segs[0].y1 };
+  }
+
+  // Liang–Barsky line-segment vs axis-aligned-rect intersection test
+  function rectIntersectsSegment(
+    rx: number, ry: number, rw: number, rh: number,
+    seg: Segment
+  ): boolean {
+    let t0 = 0, t1 = 1;
+    const dx = seg.x2 - seg.x1;
+    const dy = seg.y2 - seg.y1;
+    const p = [-dx, dx, -dy, dy];
+    const q = [seg.x1 - rx, rx + rw - seg.x1, seg.y1 - ry, ry + rh - seg.y1];
+    for (let i = 0; i < 4; i++) {
+      if (p[i] === 0) {
+        if (q[i] < 0) return false;
+      } else {
+        const r = q[i] / p[i];
+        if (p[i] < 0) { t0 = Math.max(t0, r); }
+        else { t1 = Math.min(t1, r); }
+        if (t0 > t1) return false;
+      }
+    }
+    return true;
+  }
+
+  // Pre-compute all edge segment lists
+  const allEdgeSegs = new Map<string, Segment[]>();
+  for (const edge of edges) {
+    allEdgeSegs.set(edge.id, edgeSegments(edge));
+  }
+
+  // Collect all segments of edges OTHER than the given edge
+  function otherSegments(edgeId: string): Segment[] {
+    const out: Segment[] = [];
+    for (const [id, segs] of allEdgeSegs) {
+      if (id !== edgeId) out.push(...segs);
+    }
+    return out;
+  }
+
+  // For each labeled edge, find a label offset that avoids crossing other edges
+  const CHAR_WIDTH = 6;
+  const LABEL_PAD = 10;
+  const LABEL_HEIGHT = 20;
+  const CANDIDATES = [0.5, 0.35, 0.65, 0.25, 0.75, 0.15, 0.85];
+
+  const edgeLabelOffsets = new Map<string, number>();
+  for (const edge of edges) {
+    if (!edge.label) continue;
+    const segs = allEdgeSegs.get(edge.id);
+    if (!segs || segs.length === 0) continue;
+
+    const text = typeof edge.label === 'string' ? edge.label : '';
+    const labelW = text.length * CHAR_WIDTH + LABEL_PAD * 2;
+    const others = otherSegments(edge.id);
+
+    let bestOffset = 0.5;
+    for (const t of CANDIDATES) {
+      const pt = pointOnPath(segs, t);
+      const rx = pt.x - labelW / 2;
+      const ry = pt.y - LABEL_HEIGHT / 2;
+      let hit = false;
+      for (const seg of others) {
+        if (rectIntersectsSegment(rx, ry, labelW, LABEL_HEIGHT, seg)) {
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) {
+        bestOffset = t;
+        break;
+      }
+    }
+    edgeLabelOffsets.set(edge.id, bestOffset);
+  }
+
   // ── Assemble final edges with handle assignments ──────────────────
   const layoutedEdges = edges.map((edge) => {
     const handles = edgeHandleMap.get(edge.id);
+    const labelOffset = edgeLabelOffsets.get(edge.id);
     return {
       ...edge,
       ...(handles?.sourceHandle ? { sourceHandle: handles.sourceHandle } : {}),
       ...(handles?.targetHandle ? { targetHandle: handles.targetHandle } : {}),
+      ...(labelOffset !== undefined ? { data: { ...edge.data, labelOffset } } : {}),
     };
   });
 
