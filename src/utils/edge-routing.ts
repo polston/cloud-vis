@@ -170,6 +170,10 @@ export function computeEdgeRouting(
   }
 
   const GAP_MARGIN = 15;
+  // Minimum vertical distance between an edge's midY and its own source/target
+  // endpoint.  Must exceed getSmoothStepPath's borderRadius (default 5) to
+  // prevent the rounded corner from "coiling" in a too-short vertical segment.
+  const MIN_BEND_DISTANCE = 25;
   const edgeMidY = new Map<string, number>();
 
   for (const [, group] of edgesByRankPair) {
@@ -189,7 +193,15 @@ export function computeEdgeRouting(
         }
       } else {
         for (let i = 0; i < group.length; i++) {
-          const midY = bandTop + (bandBottom - bandTop) * (i / (group.length - 1));
+          let midY = bandTop + (bandBottom - bandTop) * (i / (group.length - 1));
+          // Clamp to stay MIN_BEND_DISTANCE from this edge's own endpoints
+          const lowerBound = group[i].sy + MIN_BEND_DISTANCE;
+          const upperBound = group[i].ty - MIN_BEND_DISTANCE;
+          if (lowerBound < upperBound) {
+            midY = Math.max(lowerBound, Math.min(upperBound, midY));
+          } else {
+            midY = (group[i].sy + group[i].ty) / 2;
+          }
           edgeMidY.set(group[i].edge.id, midY);
         }
       }
