@@ -107,6 +107,9 @@ export default function SmartEdge({
     labelY = pt.y;
   }
 
+  // Always position labels above the edge line
+  labelY -= 12;
+
   // Compute horizontal segment for drag handle
   const midY = effectiveMidY ?? (sourceY + targetY) / 2;
   const hSegMinX = Math.min(sourceX, targetX);

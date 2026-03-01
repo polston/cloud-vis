@@ -7,6 +7,53 @@ import { getZoneLayoutedElements } from '../utils/zone-layout';
 import { applyEdgeStyle } from '../utils/edge-styles';
 import type { BreadcrumbItem, CloudNode, CloudEdge } from '../types';
 
+/**
+ * BFS in both directions from the selected node to find all edges
+ * in paths leading to and from it (transitive highlighting).
+ */
+function getTransitiveEdgeIds(nodeId: string, edges: Edge[]): Set<string> {
+  const result = new Set<string>();
+
+  const bySource = new Map<string, Edge[]>();
+  const byTarget = new Map<string, Edge[]>();
+  for (const e of edges) {
+    if (!bySource.has(e.source)) bySource.set(e.source, []);
+    bySource.get(e.source)!.push(e);
+    if (!byTarget.has(e.target)) byTarget.set(e.target, []);
+    byTarget.get(e.target)!.push(e);
+  }
+
+  // Forward: follow outgoing edges
+  const fwdVisited = new Set<string>([nodeId]);
+  const fwdQueue = [nodeId];
+  while (fwdQueue.length > 0) {
+    const n = fwdQueue.shift()!;
+    for (const e of bySource.get(n) ?? []) {
+      result.add(e.id);
+      if (!fwdVisited.has(e.target)) {
+        fwdVisited.add(e.target);
+        fwdQueue.push(e.target);
+      }
+    }
+  }
+
+  // Backward: follow incoming edges
+  const bwdVisited = new Set<string>([nodeId]);
+  const bwdQueue = [nodeId];
+  while (bwdQueue.length > 0) {
+    const n = bwdQueue.shift()!;
+    for (const e of byTarget.get(n) ?? []) {
+      result.add(e.id);
+      if (!bwdVisited.has(e.source)) {
+        bwdVisited.add(e.source);
+        bwdQueue.push(e.source);
+      }
+    }
+  }
+
+  return result;
+}
+
 export const MAX_HIERARCHY_DEPTH = 5;
 
 // Resolve the parent chain from a node id back to root
@@ -68,13 +115,13 @@ export function useGraphNavigation() {
 
   // Apply selection-dependent edge highlighting separately so node refs stay stable
   const explorerEdges = useMemo(() => {
+    if (!selectedNodeId) {
+      return explorerLayout.edges;
+    }
+    const highlighted = getTransitiveEdgeIds(selectedNodeId, explorerLayout.edges);
     return explorerLayout.edges.map((edge) => ({
       ...edge,
-      className: selectedNodeId
-        ? edge.source === selectedNodeId || edge.target === selectedNodeId
-          ? 'edge-highlighted'
-          : 'edge-dimmed'
-        : undefined,
+      className: highlighted.has(edge.id) ? 'edge-highlighted' : 'edge-dimmed',
     })) as CloudEdge[];
   }, [explorerLayout.edges, selectedNodeId]);
 
@@ -126,17 +173,25 @@ export function useGraphNavigation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, zoneDepth, collapsedZones, zonesLocked, nodesLocked, positionResetVersion]);
 
-  // Apply selection-dependent edge highlighting separately so node refs stay stable
+  // Apply selection-dependent edge highlighting separately so node refs stay stable.
+  // Only highlight edges when a leaf node (not a zone container) is selected.
   const zoneEdges = useMemo(() => {
+    if (!selectedNodeId) {
+      return zoneLayout.edges;
+    }
+    // Don't highlight edges when a zone container is selected
+    const isZoneSelected = zoneLayout.nodes.some(
+      (n) => n.id === selectedNodeId && n.type === 'zoneContainer'
+    );
+    if (isZoneSelected) {
+      return zoneLayout.edges;
+    }
+    const highlighted = getTransitiveEdgeIds(selectedNodeId, zoneLayout.edges);
     return zoneLayout.edges.map((edge) => ({
       ...edge,
-      className: selectedNodeId
-        ? edge.source === selectedNodeId || edge.target === selectedNodeId
-          ? 'edge-highlighted'
-          : 'edge-dimmed'
-        : undefined,
+      className: highlighted.has(edge.id) ? 'edge-highlighted' : 'edge-dimmed',
     }));
-  }, [zoneLayout.edges, selectedNodeId]);
+  }, [zoneLayout.edges, zoneLayout.nodes, selectedNodeId]);
 
   const nodes = viewMode === 'zone' ? zoneLayout.nodes : explorerLayout.nodes;
   const edges = viewMode === 'zone' ? zoneEdges : explorerEdges;
