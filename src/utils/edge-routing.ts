@@ -1,18 +1,57 @@
 import { type Edge } from '@xyflow/react';
 
+// ── Shared types ─────────────────────────────────────────────────
 export interface HandleInfo {
   id: string;
   position: number; // percentage from left (0–100)
 }
 
-interface NodeBounds {
+export interface NodeBounds {
   x: number; // top-left x
   y: number; // top-left y
   w: number;
   h: number;
 }
 
-interface Segment { x1: number; y1: number; x2: number; y2: number }
+export interface Segment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface EdgeRoutingOptions {
+  avoidNodes?: boolean;
+  nodePadding?: number;    // clearance around nodes (default 10)
+  segmentGap?: number;     // min vertical gap between horizontal segments (default 8)
+  minBendDistance?: number; // min vertical distance from endpoints (default 25)
+}
+
+export interface EdgeRoutingResult {
+  /** Per-node handle assignments */
+  nodeHandles: Map<string, { sourceHandles: HandleInfo[]; targetHandles: HandleInfo[] }>;
+  /** Per-edge routing data */
+  edgeAssignments: Map<string, {
+    sourceHandle: string;
+    targetHandle: string;
+    midY: number;
+    relativeMidY: number;
+    labelOffset?: number;
+  }>;
+}
+
+/**
+ * An edge router takes positioned nodes and edges, and produces
+ * handle assignments + routing parameters for each edge.
+ * Swap implementations to change the routing algorithm.
+ */
+export type EdgeRouter = (
+  edges: Edge[],
+  nodeBoundsMap: Map<string, NodeBounds>,
+  options?: EdgeRoutingOptions
+) => EdgeRoutingResult;
+
+// ── Handle position computation ──────────────────────────────────
 
 /**
  * Compute evenly-spaced handle positions across a node's width.
@@ -31,31 +70,218 @@ export function computeHandlePositions(count: number): number[] {
   return positions;
 }
 
-export interface EdgeRoutingResult {
-  /** Per-node handle assignments */
-  nodeHandles: Map<string, { sourceHandles: HandleInfo[]; targetHandles: HandleInfo[] }>;
-  /** Per-edge routing data */
-  edgeAssignments: Map<string, {
-    sourceHandle: string;
-    targetHandle: string;
-    midY: number;
-    labelOffset?: number;
-  }>;
+// ── Geometry utilities ───────────────────────────────────────────
+
+/** Liang-Barsky line-segment vs axis-aligned-rect intersection test */
+export function rectIntersectsSegment(
+  rx: number, ry: number, rw: number, rh: number,
+  seg: Segment
+): boolean {
+  let t0 = 0, t1 = 1;
+  const dx = seg.x2 - seg.x1;
+  const dy = seg.y2 - seg.y1;
+  const p = [-dx, dx, -dy, dy];
+  const q = [seg.x1 - rx, rx + rw - seg.x1, seg.y1 - ry, ry + rh - seg.y1];
+  for (let i = 0; i < 4; i++) {
+    if (p[i] === 0) {
+      if (q[i] < 0) return false;
+    } else {
+      const r = q[i] / p[i];
+      if (p[i] < 0) { t0 = Math.max(t0, r); }
+      else { t1 = Math.min(t1, r); }
+      if (t0 > t1) return false;
+    }
+  }
+  return true;
 }
+
+/** Get a point at parameter t (0-1) along a series of segments */
+export function pointOnPath(segs: Segment[], t: number): { x: number; y: number } {
+  let total = 0;
+  const lens: number[] = [];
+  for (const s of segs) {
+    const l = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+    lens.push(l);
+    total += l;
+  }
+  const dist = t * total;
+  let acc = 0;
+  for (let i = 0; i < segs.length; i++) {
+    if (acc + lens[i] >= dist || i === segs.length - 1) {
+      const st = lens[i] > 0 ? (dist - acc) / lens[i] : 0;
+      return {
+        x: segs[i].x1 + st * (segs[i].x2 - segs[i].x1),
+        y: segs[i].y1 + st * (segs[i].y2 - segs[i].y1),
+      };
+    }
+    acc += lens[i];
+  }
+  return { x: segs[0]?.x1 ?? 0, y: segs[0]?.y1 ?? 0 };
+}
+
+// ── Edge coordinate helpers ──────────────────────────────────────
+
+interface EdgeCoords {
+  edge: Edge;
+  sx: number;
+  sy: number;
+  tx: number;
+  ty: number;
+}
+
+function buildEdgeSegments(
+  sx: number, sy: number, tx: number, ty: number, midY: number
+): Segment[] {
+  return [
+    { x1: sx, y1: sy, x2: sx, y2: midY },
+    { x1: sx, y1: midY, x2: tx, y2: midY },
+    { x1: tx, y1: midY, x2: tx, y2: ty },
+  ];
+}
+
+// ── Node avoidance ───────────────────────────────────────────────
+
+function avoidNodes(
+  edgeMidY: Map<string, number>,
+  edgeCoords: Map<string, EdgeCoords>,
+  nodeBoundsMap: Map<string, NodeBounds>,
+  edges: Edge[],
+  minBendDistance: number,
+  padding: number
+): void {
+  for (const edge of edges) {
+    const coords = edgeCoords.get(edge.id);
+    if (!coords) continue;
+
+    const currentMidY = edgeMidY.get(edge.id);
+    if (currentMidY === undefined) continue;
+
+    const { sx, sy, tx, ty } = coords;
+    const hSegMinX = Math.min(sx, tx);
+    const hSegMaxX = Math.max(sx, tx);
+
+    for (const [nodeId, bounds] of nodeBoundsMap) {
+      if (nodeId === edge.source || nodeId === edge.target) continue;
+
+      const nodeLeft = bounds.x - padding;
+      const nodeRight = bounds.x + bounds.w + padding;
+      const nodeTop = bounds.y - padding;
+      const nodeBottom = bounds.y + bounds.h + padding;
+
+      // Check horizontal overlap
+      if (hSegMaxX < nodeLeft || hSegMinX > nodeRight) continue;
+      // Check vertical overlap (is midY within the node's padded bounds?)
+      if (currentMidY < nodeTop || currentMidY > nodeBottom) continue;
+
+      // Collision detected — try routing above or below the node
+      const aboveMidY = nodeTop - 1;
+      const belowMidY = nodeBottom + 1;
+
+      const lowerBound = sy + minBendDistance;
+      const upperBound = ty - minBendDistance;
+
+      const aboveValid = aboveMidY >= lowerBound && aboveMidY <= upperBound;
+      const belowValid = belowMidY >= lowerBound && belowMidY <= upperBound;
+
+      if (aboveValid && belowValid) {
+        edgeMidY.set(edge.id,
+          Math.abs(aboveMidY - currentMidY) <= Math.abs(belowMidY - currentMidY)
+            ? aboveMidY : belowMidY
+        );
+      } else if (aboveValid) {
+        edgeMidY.set(edge.id, aboveMidY);
+      } else if (belowValid) {
+        edgeMidY.set(edge.id, belowMidY);
+      }
+      // If neither is valid, keep the original (tight layout, nothing we can do)
+      break; // Handle first collision per edge
+    }
+  }
+}
+
+// ── Horizontal segment deconfliction ─────────────────────────────
+
+function resolveHorizontalOverlaps(
+  edgeMidY: Map<string, number>,
+  edgeCoords: Map<string, EdgeCoords>,
+  edges: Edge[],
+  minBendDistance: number,
+  segmentGap: number
+): void {
+  interface HSegment {
+    edgeId: string;
+    midY: number;
+    minX: number;
+    maxX: number;
+    sy: number;
+    ty: number;
+  }
+
+  const hSegments: HSegment[] = [];
+  for (const edge of edges) {
+    const coords = edgeCoords.get(edge.id);
+    const midY = edgeMidY.get(edge.id);
+    if (!coords || midY === undefined) continue;
+    hSegments.push({
+      edgeId: edge.id,
+      midY,
+      minX: Math.min(coords.sx, coords.tx),
+      maxX: Math.max(coords.sx, coords.tx),
+      sy: coords.sy,
+      ty: coords.ty,
+    });
+  }
+
+  hSegments.sort((a, b) => a.midY - b.midY);
+
+  for (let i = 1; i < hSegments.length; i++) {
+    const prev = hSegments[i - 1];
+    const curr = hSegments[i];
+
+    // Only separate if their X ranges overlap
+    const xOverlap = curr.minX < prev.maxX && curr.maxX > prev.minX;
+    if (!xOverlap) continue;
+
+    const gap = curr.midY - prev.midY;
+    if (gap < segmentGap) {
+      const newMidY = prev.midY + segmentGap;
+      const clamped = Math.max(
+        curr.sy + minBendDistance,
+        Math.min(curr.ty - minBendDistance, newMidY)
+      );
+      edgeMidY.set(curr.edgeId, clamped);
+      curr.midY = clamped; // update for subsequent comparisons
+    }
+  }
+}
+
+// ── Main routing function ────────────────────────────────────────
 
 /**
  * Compute edge routing for a set of nodes and edges.
- * Assigns handles, computes per-edge midY offsets, and label collision avoidance.
- *
- * @param edges - The edges to route
- * @param nodeBoundsMap - Map of node ID to absolute bounding box (top-left + size)
+ * Assigns handles, computes per-edge midY offsets, avoids node/edge overlaps,
+ * and performs label collision avoidance.
  */
-export function computeEdgeRouting(
+export const computeEdgeRouting: EdgeRouter = function computeEdgeRouting(
   edges: Edge[],
-  nodeBoundsMap: Map<string, NodeBounds>
+  nodeBoundsMap: Map<string, NodeBounds>,
+  options?: EdgeRoutingOptions
 ): EdgeRoutingResult {
+  const {
+    avoidNodes: shouldAvoidNodes = false,
+    nodePadding = 10,
+    segmentGap = 8,
+    minBendDistance = 25,
+  } = options ?? {};
+
   const nodeHandles = new Map<string, { sourceHandles: HandleInfo[]; targetHandles: HandleInfo[] }>();
-  const edgeAssignments = new Map<string, { sourceHandle: string; targetHandle: string; midY: number; labelOffset?: number }>();
+  const edgeAssignments = new Map<string, {
+    sourceHandle: string;
+    targetHandle: string;
+    midY: number;
+    relativeMidY: number;
+    labelOffset?: number;
+  }>();
 
   if (edges.length === 0) return { nodeHandles, edgeAssignments };
 
@@ -138,7 +364,6 @@ export function computeEdgeRouting(
   }
 
   // ── Compute per-edge midY offsets ─────────────────────────────────
-  interface EdgeCoords { edge: Edge; sx: number; sy: number; tx: number; ty: number }
   const edgeCoords = new Map<string, EdgeCoords>();
 
   for (const edge of edges) {
@@ -160,6 +385,7 @@ export function computeEdgeRouting(
     edgeCoords.set(edge.id, { edge, sx, sy, tx, ty });
   }
 
+  const GAP_MARGIN = 15;
   const RANK_QUANT = 10;
   const edgesByRankPair = new Map<string, EdgeCoords[]>();
 
@@ -169,11 +395,6 @@ export function computeEdgeRouting(
     edgesByRankPair.get(rankKey)!.push(coords);
   }
 
-  const GAP_MARGIN = 15;
-  // Minimum vertical distance between an edge's midY and its own source/target
-  // endpoint.  Must exceed getSmoothStepPath's borderRadius (default 5) to
-  // prevent the rounded corner from "coiling" in a too-short vertical segment.
-  const MIN_BEND_DISTANCE = 25;
   const edgeMidY = new Map<string, number>();
 
   for (const [, group] of edgesByRankPair) {
@@ -194,9 +415,8 @@ export function computeEdgeRouting(
       } else {
         for (let i = 0; i < group.length; i++) {
           let midY = bandTop + (bandBottom - bandTop) * (i / (group.length - 1));
-          // Clamp to stay MIN_BEND_DISTANCE from this edge's own endpoints
-          const lowerBound = group[i].sy + MIN_BEND_DISTANCE;
-          const upperBound = group[i].ty - MIN_BEND_DISTANCE;
+          const lowerBound = group[i].sy + minBendDistance;
+          const upperBound = group[i].ty - minBendDistance;
           if (lowerBound < upperBound) {
             midY = Math.max(lowerBound, Math.min(upperBound, midY));
           } else {
@@ -208,69 +428,22 @@ export function computeEdgeRouting(
     }
   }
 
+  // ── Phase 1: Node avoidance ─────────────────────────────────────
+  if (shouldAvoidNodes) {
+    avoidNodes(edgeMidY, edgeCoords, nodeBoundsMap, edges, minBendDistance, nodePadding);
+  }
+
+  // ── Phase 2: Cross-rank horizontal segment deconfliction ────────
+  resolveHorizontalOverlaps(edgeMidY, edgeCoords, edges, minBendDistance, segmentGap);
+
   // ── Edge segments for label collision avoidance ────────────────────
-  function edgeSegments(edgeId: string): Segment[] {
-    const coords = edgeCoords.get(edgeId);
-    if (!coords) return [];
-
-    const { sx, sy, tx, ty } = coords;
-    const midY = edgeMidY.get(edgeId) ?? (sy + ty) / 2;
-
-    return [
-      { x1: sx, y1: sy, x2: sx, y2: midY },
-      { x1: sx, y1: midY, x2: tx, y2: midY },
-      { x1: tx, y1: midY, x2: tx, y2: ty },
-    ];
-  }
-
-  function pointOnPath(segs: Segment[], t: number): { x: number; y: number } {
-    let total = 0;
-    const lens: number[] = [];
-    for (const s of segs) {
-      const l = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
-      lens.push(l);
-      total += l;
-    }
-    const dist = t * total;
-    let acc = 0;
-    for (let i = 0; i < segs.length; i++) {
-      if (acc + lens[i] >= dist || i === segs.length - 1) {
-        const st = lens[i] > 0 ? (dist - acc) / lens[i] : 0;
-        return {
-          x: segs[i].x1 + st * (segs[i].x2 - segs[i].x1),
-          y: segs[i].y1 + st * (segs[i].y2 - segs[i].y1),
-        };
-      }
-      acc += lens[i];
-    }
-    return { x: segs[0]?.x1 ?? 0, y: segs[0]?.y1 ?? 0 };
-  }
-
-  function rectIntersectsSegment(
-    rx: number, ry: number, rw: number, rh: number,
-    seg: Segment
-  ): boolean {
-    let t0 = 0, t1 = 1;
-    const dx = seg.x2 - seg.x1;
-    const dy = seg.y2 - seg.y1;
-    const p = [-dx, dx, -dy, dy];
-    const q = [seg.x1 - rx, rx + rw - seg.x1, seg.y1 - ry, ry + rh - seg.y1];
-    for (let i = 0; i < 4; i++) {
-      if (p[i] === 0) {
-        if (q[i] < 0) return false;
-      } else {
-        const r = q[i] / p[i];
-        if (p[i] < 0) { t0 = Math.max(t0, r); }
-        else { t1 = Math.min(t1, r); }
-        if (t0 > t1) return false;
-      }
-    }
-    return true;
-  }
-
   const allEdgeSegs = new Map<string, Segment[]>();
   for (const edge of edges) {
-    allEdgeSegs.set(edge.id, edgeSegments(edge.id));
+    const coords = edgeCoords.get(edge.id);
+    if (!coords) continue;
+    const { sx, sy, tx, ty } = coords;
+    const midY = edgeMidY.get(edge.id) ?? (sy + ty) / 2;
+    allEdgeSegs.set(edge.id, buildEdgeSegments(sx, sy, tx, ty, midY));
   }
 
   const CHAR_WIDTH = 6;
@@ -318,16 +491,21 @@ export function computeEdgeRouting(
     const handles = edgeHandleMap.get(edge.id);
     const midY = edgeMidY.get(edge.id);
     const labelOffset = edgeLabelOffsets.get(edge.id);
+    const coords = edgeCoords.get(edge.id);
 
-    if (handles && midY !== undefined) {
+    if (handles && midY !== undefined && coords) {
+      const range = coords.ty - coords.sy;
+      const relativeMidY = range > 0 ? (midY - coords.sy) / range : 0.5;
+
       edgeAssignments.set(edge.id, {
         sourceHandle: handles.sourceHandle,
         targetHandle: handles.targetHandle,
         midY,
+        relativeMidY,
         ...(labelOffset !== undefined ? { labelOffset } : {}),
       });
     }
   }
 
   return { nodeHandles, edgeAssignments };
-}
+};
