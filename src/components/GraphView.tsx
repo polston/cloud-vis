@@ -68,6 +68,7 @@ export default function GraphView() {
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const searchNavRef = useRef<string | null>(null);
 
   // Allow pinch-to-zoom when the gesture starts on a node.
   //
@@ -135,6 +136,7 @@ export default function GraphView() {
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
+      if (searchNavRef.current) return;
       fitView({ padding: 0.15, duration: 300 });
     }, 50);
     return () => clearTimeout(timeoutId);
@@ -201,15 +203,17 @@ export default function GraphView() {
 
   const onSearchSelect = useCallback(
     (entry: SearchIndexEntry) => {
+      searchNavRef.current = entry.nodeId;
       const nodeId = navigateToNode(entry.nodeId, entry.parentKey);
-      // In zone mode, zoom to the selected node after layout settles
-      if (viewMode === 'zone') {
+      // Zoom to the selected node after layout settles (both view modes)
+      setTimeout(() => {
+        fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.5 });
         setTimeout(() => {
-          fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.5 });
-        }, 100);
-      }
+          searchNavRef.current = null;
+        }, 550);
+      }, 100);
     },
-    [navigateToNode, viewMode, fitView]
+    [navigateToNode, fitView]
   );
 
   const isZoneMode = viewMode === 'zone';
