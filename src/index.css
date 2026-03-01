@@ -474,7 +474,7 @@ body {
 
 .react-flow__edge-path {
   stroke-width: 1.5;
-  transition: filter 0.15s ease;
+  transition: filter 0.25s ease, opacity 0.25s ease, stroke-width 0.25s ease;
 }
 
 .react-flow__edge-text {
@@ -489,6 +489,34 @@ body {
 .react-flow__edge:hover .react-flow__edge-path {
   stroke-width: 2.5 !important;
   filter: brightness(1.4);
+}
+
+/* ─── Edge highlight on node selection ────────────────────── */
+.react-flow__edge.edge-highlighted .react-flow__edge-path {
+  stroke-width: 2.5 !important;
+  filter: brightness(1.5) drop-shadow(0 0 4px currentColor);
+}
+
+.react-flow__edge.edge-highlighted .react-flow__edge-text {
+  fill: var(--text-primary) !important;
+}
+
+.react-flow__edge.edge-dimmed .react-flow__edge-path {
+  opacity: 0.15;
+}
+
+.react-flow__edge.edge-dimmed .react-flow__edge-text {
+  opacity: 0.15;
+}
+
+.react-flow__edge.edge-dimmed .react-flow__edge-textbg {
+  opacity: 0.15;
+}
+
+.react-flow__edge.edge-dimmed:hover .react-flow__edge-path {
+  opacity: 0.5;
+  stroke-width: 2 !important;
+  filter: brightness(1.2);
 }
 
 /* Controls */
