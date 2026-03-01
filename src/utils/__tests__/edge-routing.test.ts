@@ -20,23 +20,23 @@ describe('computeHandlePositions', () => {
     expect(computeHandlePositions(1)).toEqual([50]);
   });
 
-  it('spreads from 20 to 80 for two connections', () => {
+  it('spreads from 15 to 85 for two connections', () => {
     const pos = computeHandlePositions(2);
-    expect(pos).toEqual([20, 80]);
+    expect(pos).toEqual([15, 85]);
   });
 
   it('spreads evenly for three connections', () => {
     const pos = computeHandlePositions(3);
-    expect(pos[0]).toBe(20);
+    expect(pos[0]).toBe(15);
     expect(pos[1]).toBe(50);
-    expect(pos[2]).toBe(80);
+    expect(pos[2]).toBe(85);
   });
 
   it('handles large fan-out', () => {
     const pos = computeHandlePositions(7);
     expect(pos).toHaveLength(7);
-    expect(pos[0]).toBe(20);
-    expect(pos[6]).toBe(80);
+    expect(pos[0]).toBe(15);
+    expect(pos[6]).toBe(85);
     // All positions should be ascending
     for (let i = 1; i < pos.length; i++) {
       expect(pos[i]).toBeGreaterThan(pos[i - 1]);
@@ -173,9 +173,9 @@ describe('computeEdgeRouting', () => {
 
     const aHandles = result.nodeHandles.get('a');
     expect(aHandles?.sourceHandles).toHaveLength(3);
-    // Should be spread from 20% to 80%
-    expect(aHandles?.sourceHandles[0].position).toBe(20);
-    expect(aHandles?.sourceHandles[2].position).toBe(80);
+    // Should be spread from 15% to 85%
+    expect(aHandles?.sourceHandles[0].position).toBe(15);
+    expect(aHandles?.sourceHandles[2].position).toBe(85);
   });
 
   // ── Node avoidance ────────────────────────────────────────────
@@ -320,21 +320,18 @@ describe('computeEdgeRouting', () => {
     }
   });
 
-  // ── Vertical segment proximity ─────────────────────────────────
+  // ── Common-endpoint midY spreading ──────────────────────────────
 
-  it('adjusts midY when vertical segments from different edges are too close', () => {
-    // Two edges from nearby nodes whose vertical segments would nearly overlap
+  it('spreads midY for edges converging to the same target node', () => {
+    // Two edges from different sources converge to the same target (like Route53 → ELB and CloudWatch → ELB)
     const edges: Edge[] = [
-      { id: 'e1', source: 'a', target: 'b' },
-      { id: 'e2', source: 'c', target: 'd' },
+      { id: 'e1', source: 'a', target: 'c' },
+      { id: 'e2', source: 'b', target: 'c' },
     ];
-    // Nodes a and c are at nearly the same X, producing nearly-coincident
-    // source vertical segments
     const bounds = new Map([
-      makeBounds('a', 0, 0, 200, 80),
-      makeBounds('b', 0, 400, 200, 80),
-      makeBounds('c', 5, 0, 200, 80),   // just 5px offset from a
-      makeBounds('d', 5, 400, 200, 80),
+      makeBounds('a', 0, 0, 200, 80),     // source 1 at top-left
+      makeBounds('b', 300, 0, 200, 80),    // source 2 at top-right
+      makeBounds('c', 150, 300, 200, 80),  // shared target at bottom-center
     ]);
     const result = computeEdgeRouting(edges, bounds);
 
@@ -342,7 +339,59 @@ describe('computeEdgeRouting', () => {
     const midY2 = result.edgeAssignments.get('e2')?.midY;
     expect(midY1).toBeDefined();
     expect(midY2).toBeDefined();
-    // The midY values should differ to reduce vertical segment overlap
+    // Edges sharing a target should have significantly different midY values
+    expect(Math.abs(midY1! - midY2!)).toBeGreaterThanOrEqual(20);
+  });
+
+  it('spreads midY for edges diverging from the same source node', () => {
+    // Three edges fan out from the same source (like ELB → EKS, EC2, Lambda)
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'a', target: 'c' },
+      { id: 'e3', source: 'a', target: 'd' },
+    ];
+    const bounds = new Map([
+      makeBounds('a', 200, 0, 200, 80),    // source at top-center
+      makeBounds('b', 0, 300, 200, 80),     // target left
+      makeBounds('c', 200, 300, 200, 80),   // target center
+      makeBounds('d', 400, 300, 200, 80),   // target right
+    ]);
+    const result = computeEdgeRouting(edges, bounds);
+
+    const midYs = ['e1', 'e2', 'e3'].map(id =>
+      result.edgeAssignments.get(id)?.midY
+    ).filter((v): v is number => v !== undefined);
+
+    expect(midYs).toHaveLength(3);
+    midYs.sort((a, b) => a - b);
+    // All pairwise gaps should show separation
+    for (let i = 1; i < midYs.length; i++) {
+      expect(midYs[i] - midYs[i - 1]).toBeGreaterThan(10);
+    }
+  });
+
+  it('gracefully degrades when vertical space is too tight for full spreading', () => {
+    // Two edges sharing a target with limited vertical space.
+    // Band = [sy+25, ty-25] = [105, 115] = only 10px, less than desiredGap of 20.
+    // The function should reduce the gap proportionally.
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'c' },
+      { id: 'e2', source: 'b', target: 'c' },
+    ];
+    const bounds = new Map([
+      makeBounds('a', 0, 0, 200, 80),       // bottom at y=80
+      makeBounds('b', 250, 0, 200, 80),      // bottom at y=80
+      makeBounds('c', 100, 140, 200, 80),    // top at y=140 → band [105, 115]
+    ]);
+    const result = computeEdgeRouting(edges, bounds);
+
+    const midY1 = result.edgeAssignments.get('e1')?.midY;
+    const midY2 = result.edgeAssignments.get('e2')?.midY;
+    expect(midY1).toBeDefined();
+    expect(midY2).toBeDefined();
+    // Even in tight space, midY values should still differ (reduced gap)
     expect(Math.abs(midY1! - midY2!)).toBeGreaterThan(5);
+    // But the gap is smaller than the full desiredGap of 20
+    expect(Math.abs(midY1! - midY2!)).toBeLessThan(20);
   });
 });
