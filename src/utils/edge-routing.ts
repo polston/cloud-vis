@@ -232,25 +232,228 @@ function resolveHorizontalOverlaps(
     });
   }
 
-  hSegments.sort((a, b) => a.midY - b.midY);
+  const MAX_ITERATIONS = 5;
 
-  for (let i = 1; i < hSegments.length; i++) {
-    const prev = hSegments[i - 1];
-    const curr = hSegments[i];
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    hSegments.sort((a, b) => a.midY - b.midY);
+    let anyAdjusted = false;
 
-    // Only separate if their X ranges overlap
-    const xOverlap = curr.minX < prev.maxX && curr.maxX > prev.minX;
-    if (!xOverlap) continue;
+    for (let i = 1; i < hSegments.length; i++) {
+      const prev = hSegments[i - 1];
+      const curr = hSegments[i];
 
-    const gap = curr.midY - prev.midY;
-    if (gap < segmentGap) {
-      const newMidY = prev.midY + segmentGap;
+      // Only separate if their X ranges overlap
+      const xOverlap = curr.minX < prev.maxX && curr.maxX > prev.minX;
+      if (!xOverlap) continue;
+
+      const gap = curr.midY - prev.midY;
+      if (gap < segmentGap) {
+        const newMidY = prev.midY + segmentGap;
+        const clamped = Math.max(
+          curr.sy + minBendDistance,
+          Math.min(curr.ty - minBendDistance, newMidY)
+        );
+        if (Math.abs(clamped - curr.midY) > 0.5) {
+          edgeMidY.set(curr.edgeId, clamped);
+          curr.midY = clamped;
+          anyAdjusted = true;
+        }
+      }
+    }
+
+    if (!anyAdjusted) break;
+  }
+}
+
+// ── Horizontal-vs-vertical crossing resolution ───────────────────
+
+interface EdgeGeometry {
+  edgeId: string;
+  sx: number; sy: number; tx: number; ty: number;
+  midY: number;
+  hMinX: number; hMaxX: number;
+}
+
+function checkHVCrossing(
+  hEdge: EdgeGeometry,
+  vX: number,
+  vYTop: number,
+  vYBottom: number
+): boolean {
+  const top = Math.min(vYTop, vYBottom);
+  const bot = Math.max(vYTop, vYBottom);
+  return (
+    vX >= hEdge.hMinX && vX <= hEdge.hMaxX &&
+    hEdge.midY >= top && hEdge.midY <= bot
+  );
+}
+
+function nudgeMidYAway(
+  hEdge: EdgeGeometry,
+  edgeMidY: Map<string, number>,
+  edgeCoords: Map<string, EdgeCoords>,
+  minBendDistance: number,
+  gap: number
+): void {
+  const hCoords = edgeCoords.get(hEdge.edgeId);
+  if (!hCoords) return;
+
+  const lowerBound = hCoords.sy + minBendDistance;
+  const upperBound = hCoords.ty - minBendDistance;
+
+  const upMidY = hEdge.midY - gap;
+  const downMidY = hEdge.midY + gap;
+  const upValid = upMidY >= lowerBound && upMidY <= upperBound;
+  const downValid = downMidY >= lowerBound && downMidY <= upperBound;
+
+  let newMidY = hEdge.midY;
+  if (upValid && downValid) {
+    const center = (lowerBound + upperBound) / 2;
+    newMidY = Math.abs(upMidY - center) < Math.abs(downMidY - center) ? upMidY : downMidY;
+  } else if (upValid) {
+    newMidY = upMidY;
+  } else if (downValid) {
+    newMidY = downMidY;
+  }
+
+  if (Math.abs(newMidY - hEdge.midY) > 0.5) {
+    edgeMidY.set(hEdge.edgeId, newMidY);
+    hEdge.midY = newMidY;
+  }
+}
+
+function resolveHVCrossings(
+  edgeMidY: Map<string, number>,
+  edgeCoords: Map<string, EdgeCoords>,
+  edges: Edge[],
+  minBendDistance: number,
+  crossingGap: number
+): void {
+  const geoms: EdgeGeometry[] = [];
+  for (const edge of edges) {
+    const coords = edgeCoords.get(edge.id);
+    const midY = edgeMidY.get(edge.id);
+    if (!coords || midY === undefined) continue;
+    geoms.push({
+      edgeId: edge.id,
+      sx: coords.sx, sy: coords.sy, tx: coords.tx, ty: coords.ty,
+      midY,
+      hMinX: Math.min(coords.sx, coords.tx),
+      hMaxX: Math.max(coords.sx, coords.tx),
+    });
+  }
+
+  for (let i = 0; i < geoms.length; i++) {
+    const a = geoms[i];
+    for (let j = i + 1; j < geoms.length; j++) {
+      const b = geoms[j];
+
+      // Check A's horizontal vs B's source-side vertical
+      if (checkHVCrossing(a, b.sx, b.sy, b.midY)) {
+        nudgeMidYAway(a, edgeMidY, edgeCoords, minBendDistance, crossingGap);
+        continue;
+      }
+      // Check A's horizontal vs B's target-side vertical
+      if (checkHVCrossing(a, b.tx, b.midY, b.ty)) {
+        nudgeMidYAway(a, edgeMidY, edgeCoords, minBendDistance, crossingGap);
+        continue;
+      }
+      // Check B's horizontal vs A's source-side vertical
+      if (checkHVCrossing(b, a.sx, a.sy, a.midY)) {
+        nudgeMidYAway(b, edgeMidY, edgeCoords, minBendDistance, crossingGap);
+        continue;
+      }
+      // Check B's horizontal vs A's target-side vertical
+      if (checkHVCrossing(b, a.tx, a.midY, a.ty)) {
+        nudgeMidYAway(b, edgeMidY, edgeCoords, minBendDistance, crossingGap);
+        continue;
+      }
+    }
+  }
+}
+
+// ── Vertical segment proximity detection ─────────────────────────
+
+function resolveVerticalProximity(
+  edgeMidY: Map<string, number>,
+  edgeCoords: Map<string, EdgeCoords>,
+  edges: Edge[],
+  minBendDistance: number,
+  verticalGap: number
+): void {
+  interface VSegment {
+    edgeId: string;
+    x: number;
+    yTop: number;
+    yBottom: number;
+    isSource: boolean;
+  }
+
+  const vSegments: VSegment[] = [];
+  for (const edge of edges) {
+    const coords = edgeCoords.get(edge.id);
+    const midY = edgeMidY.get(edge.id);
+    if (!coords || midY === undefined) continue;
+
+    vSegments.push({
+      edgeId: edge.id,
+      x: coords.sx,
+      yTop: Math.min(coords.sy, midY),
+      yBottom: Math.max(coords.sy, midY),
+      isSource: true,
+    });
+    vSegments.push({
+      edgeId: edge.id,
+      x: coords.tx,
+      yTop: Math.min(midY, coords.ty),
+      yBottom: Math.max(midY, coords.ty),
+      isSource: false,
+    });
+  }
+
+  vSegments.sort((a, b) => a.x - b.x);
+
+  for (let i = 0; i < vSegments.length; i++) {
+    for (let j = i + 1; j < vSegments.length; j++) {
+      const a = vSegments[i];
+      const b = vSegments[j];
+
+      if (b.x - a.x > verticalGap) break;
+      if (a.edgeId === b.edgeId) continue;
+
+      // Check Y overlap
+      const yOverlapTop = Math.max(a.yTop, b.yTop);
+      const yOverlapBottom = Math.min(a.yBottom, b.yBottom);
+      if (yOverlapTop >= yOverlapBottom) continue;
+
+      const overlapLength = yOverlapBottom - yOverlapTop;
+      if (overlapLength < verticalGap) continue;
+
+      // Nudge edge b's midY to reduce the overlap
+      const bCoords = edgeCoords.get(b.edgeId);
+      const bMidY = edgeMidY.get(b.edgeId);
+      if (!bCoords || bMidY === undefined) continue;
+
+      let newMidY: number;
+      if (b.isSource) {
+        newMidY = bMidY - verticalGap;
+      } else {
+        newMidY = bMidY + verticalGap;
+      }
+
       const clamped = Math.max(
-        curr.sy + minBendDistance,
-        Math.min(curr.ty - minBendDistance, newMidY)
+        bCoords.sy + minBendDistance,
+        Math.min(bCoords.ty - minBendDistance, newMidY)
       );
-      edgeMidY.set(curr.edgeId, clamped);
-      curr.midY = clamped; // update for subsequent comparisons
+
+      if (Math.abs(clamped - bMidY) > 1) {
+        edgeMidY.set(b.edgeId, clamped);
+        if (b.isSource) {
+          b.yBottom = Math.max(bCoords.sy, clamped);
+        } else {
+          b.yTop = Math.min(clamped, bCoords.ty);
+        }
+      }
     }
   }
 }
@@ -270,7 +473,7 @@ export const computeEdgeRouting: EdgeRouter = function computeEdgeRouting(
   const {
     avoidNodes: shouldAvoidNodes = false,
     nodePadding = 10,
-    segmentGap = 8,
+    segmentGap = 20,
     minBendDistance = 25,
   } = options ?? {};
 
@@ -398,7 +601,14 @@ export const computeEdgeRouting: EdgeRouter = function computeEdgeRouting(
   const edgeMidY = new Map<string, number>();
 
   for (const [, group] of edgesByRankPair) {
-    group.sort((a, b) => ((a.sx + a.tx) / 2) - ((b.sx + b.tx) / 2));
+    // Sort by source X first, then target X. This aligns with handle spreading
+    // (which sorts outgoing handles by target X) and reduces unnecessary crossings
+    // compared to sorting by average X center.
+    group.sort((a, b) => {
+      const dsx = a.sx - b.sx;
+      if (Math.abs(dsx) > 1) return dsx;
+      return a.tx - b.tx;
+    });
 
     if (group.length === 1) {
       edgeMidY.set(group[0].edge.id, (group[0].sy + group[0].ty) / 2);
@@ -433,7 +643,16 @@ export const computeEdgeRouting: EdgeRouter = function computeEdgeRouting(
     avoidNodes(edgeMidY, edgeCoords, nodeBoundsMap, edges, minBendDistance, nodePadding);
   }
 
-  // ── Phase 2: Cross-rank horizontal segment deconfliction ────────
+  // ── Phase 2: Horizontal-vs-vertical crossing resolution ────────
+  resolveHVCrossings(edgeMidY, edgeCoords, edges, minBendDistance, 10);
+
+  // ── Phase 3: Cross-rank horizontal segment deconfliction ────────
+  resolveHorizontalOverlaps(edgeMidY, edgeCoords, edges, minBendDistance, segmentGap);
+
+  // ── Phase 4: Vertical segment proximity detection ──────────────
+  resolveVerticalProximity(edgeMidY, edgeCoords, edges, minBendDistance, 12);
+
+  // ── Phase 5: Final horizontal cleanup after vertical nudging ───
   resolveHorizontalOverlaps(edgeMidY, edgeCoords, edges, minBendDistance, segmentGap);
 
   // ── Edge segments for label collision avoidance ────────────────────

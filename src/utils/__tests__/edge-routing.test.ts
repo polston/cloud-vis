@@ -234,4 +234,115 @@ describe('computeEdgeRouting', () => {
     expect(midY2).toBeDefined();
     expect(Math.abs(midY1! - midY2!)).toBeGreaterThanOrEqual(8);
   });
+
+  it('applies default segmentGap of 20 when no option is passed', () => {
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'c', target: 'd' },
+    ];
+    const bounds = new Map([
+      makeBounds('a', 0, 0, 200, 80),
+      makeBounds('b', 0, 300, 200, 80),
+      makeBounds('c', 50, 0, 200, 80),
+      makeBounds('d', 50, 300, 200, 80),
+    ]);
+    const result = computeEdgeRouting(edges, bounds);
+
+    const midY1 = result.edgeAssignments.get('e1')?.midY;
+    const midY2 = result.edgeAssignments.get('e2')?.midY;
+    expect(midY1).toBeDefined();
+    expect(midY2).toBeDefined();
+    expect(Math.abs(midY1! - midY2!)).toBeGreaterThanOrEqual(20);
+  });
+
+  // ── Multi-pass convergence ─────────────────────────────────────
+
+  it('resolves cascading horizontal conflicts across multiple passes', () => {
+    // Three edges with overlapping X ranges that need multiple passes
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'c', target: 'd' },
+      { id: 'e3', source: 'f', target: 'g' },
+    ];
+    const bounds = new Map([
+      makeBounds('a', 0, 0, 200, 80),
+      makeBounds('b', 0, 300, 200, 80),
+      makeBounds('c', 50, 0, 200, 80),
+      makeBounds('d', 50, 300, 200, 80),
+      makeBounds('f', 25, 0, 200, 80),
+      makeBounds('g', 25, 300, 200, 80),
+    ]);
+    const result = computeEdgeRouting(edges, bounds, { segmentGap: 15 });
+
+    const midYs = ['e1', 'e2', 'e3'].map(id =>
+      result.edgeAssignments.get(id)?.midY
+    ).filter((v): v is number => v !== undefined);
+
+    expect(midYs).toHaveLength(3);
+    midYs.sort((a, b) => a - b);
+    // All pairwise gaps should be >= segmentGap
+    for (let i = 1; i < midYs.length; i++) {
+      expect(midYs[i] - midYs[i - 1]).toBeGreaterThanOrEqual(14.5); // allow small float tolerance
+    }
+  });
+
+  // ── Horizontal-vs-vertical crossing ────────────────────────────
+
+  it('avoids horizontal segment crossing through another edge vertical segment', () => {
+    // Edge e1: horizontal at midY that could cross e2's vertical drop
+    // e1 goes from left to right, e2 drops vertically through the middle
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'c', target: 'd' },
+    ];
+    const bounds = new Map([
+      makeBounds('a', 0, 0, 200, 80),
+      makeBounds('b', 400, 300, 200, 80),
+      makeBounds('c', 200, 0, 200, 80),   // c is directly above d
+      makeBounds('d', 200, 300, 200, 80),
+    ]);
+    const result = computeEdgeRouting(edges, bounds);
+
+    const midY1 = result.edgeAssignments.get('e1')?.midY;
+    const midY2 = result.edgeAssignments.get('e2')?.midY;
+    expect(midY1).toBeDefined();
+    expect(midY2).toBeDefined();
+
+    // e2's vertical drops at x=300 (center of node c/d which is at x=200, w=200)
+    // e1's horizontal should not be at the same Y as e2's vertical segment range
+    // At minimum they should be separated by some gap
+    const e2SourceBottom = 80; // y=0 + h=80
+    const e2TargetTop = 300;   // y=300
+    if (midY1! > e2SourceBottom && midY1! < e2TargetTop) {
+      // If e1's horizontal is within e2's vertical range, it should be
+      // offset from e2's midY by at least some gap
+      expect(Math.abs(midY1! - midY2!)).toBeGreaterThan(5);
+    }
+  });
+
+  // ── Vertical segment proximity ─────────────────────────────────
+
+  it('adjusts midY when vertical segments from different edges are too close', () => {
+    // Two edges from nearby nodes whose vertical segments would nearly overlap
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'c', target: 'd' },
+    ];
+    // Nodes a and c are at nearly the same X, producing nearly-coincident
+    // source vertical segments
+    const bounds = new Map([
+      makeBounds('a', 0, 0, 200, 80),
+      makeBounds('b', 0, 400, 200, 80),
+      makeBounds('c', 5, 0, 200, 80),   // just 5px offset from a
+      makeBounds('d', 5, 400, 200, 80),
+    ]);
+    const result = computeEdgeRouting(edges, bounds);
+
+    const midY1 = result.edgeAssignments.get('e1')?.midY;
+    const midY2 = result.edgeAssignments.get('e2')?.midY;
+    expect(midY1).toBeDefined();
+    expect(midY2).toBeDefined();
+    // The midY values should differ to reduce vertical segment overlap
+    expect(Math.abs(midY1! - midY2!)).toBeGreaterThan(5);
+  });
 });
