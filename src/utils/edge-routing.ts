@@ -55,14 +55,14 @@ export type EdgeRouter = (
 
 /**
  * Compute evenly-spaced handle positions across a node's width.
- * Single connections stay centered; multiple connections spread from 20%–80%.
+ * Single connections stay centered; multiple connections spread from 15%–85%.
  */
 export function computeHandlePositions(count: number): number[] {
   if (count === 0) return [];
   if (count === 1) return [50];
 
-  const MIN_PCT = 20;
-  const MAX_PCT = 80;
+  const MIN_PCT = 15;
+  const MAX_PCT = 85;
   const positions: number[] = [];
   for (let i = 0; i < count; i++) {
     positions.push(MIN_PCT + (MAX_PCT - MIN_PCT) * (i / (count - 1)));
@@ -372,87 +372,104 @@ function resolveHVCrossings(
   }
 }
 
-// ── Vertical segment proximity detection ─────────────────────────
+// ── Common-endpoint midY spreading ───────────────────────────────
 
-function resolveVerticalProximity(
+/**
+ * Spread midY values for edges sharing a common target or source node.
+ * Without this, edges from different rank-pair groups that converge to
+ * the same node get nearly identical midY values, making them visually
+ * overlap for most of their path.
+ */
+function spreadCommonEndpointMidY(
   edgeMidY: Map<string, number>,
   edgeCoords: Map<string, EdgeCoords>,
   edges: Edge[],
   minBendDistance: number,
-  verticalGap: number
+  desiredGap: number
 ): void {
-  interface VSegment {
-    edgeId: string;
-    x: number;
-    yTop: number;
-    yBottom: number;
-    isSource: boolean;
-  }
+  const adjusted = new Set<string>();
 
-  const vSegments: VSegment[] = [];
-  for (const edge of edges) {
-    const coords = edgeCoords.get(edge.id);
-    const midY = edgeMidY.get(edge.id);
-    if (!coords || midY === undefined) continue;
+  function spreadGroup(
+    group: Edge[],
+    sortByKey: 'sx' | 'tx'
+  ): void {
+    if (group.length < 2) return;
 
-    vSegments.push({
-      edgeId: edge.id,
-      x: coords.sx,
-      yTop: Math.min(coords.sy, midY),
-      yBottom: Math.max(coords.sy, midY),
-      isSource: true,
+    // Sort to match handle assignment order
+    group.sort((a, b) => {
+      const ca = edgeCoords.get(a.id);
+      const cb = edgeCoords.get(b.id);
+      return (ca?.[sortByKey] ?? 0) - (cb?.[sortByKey] ?? 0);
     });
-    vSegments.push({
-      edgeId: edge.id,
-      x: coords.tx,
-      yTop: Math.min(midY, coords.ty),
-      yBottom: Math.max(midY, coords.ty),
-      isSource: false,
-    });
-  }
 
-  vSegments.sort((a, b) => a.x - b.x);
+    // Find the overlapping valid band across all edges in the group
+    let bandTop = -Infinity;
+    let bandBottom = Infinity;
+    for (const edge of group) {
+      const coords = edgeCoords.get(edge.id);
+      if (!coords) continue;
+      bandTop = Math.max(bandTop, coords.sy + minBendDistance);
+      bandBottom = Math.min(bandBottom, coords.ty - minBendDistance);
+    }
 
-  for (let i = 0; i < vSegments.length; i++) {
-    for (let j = i + 1; j < vSegments.length; j++) {
-      const a = vSegments[i];
-      const b = vSegments[j];
+    if (bandBottom <= bandTop) return; // no valid shared band
 
-      if (b.x - a.x > verticalGap) break;
-      if (a.edgeId === b.edgeId) continue;
+    const bandRange = bandBottom - bandTop;
+    const neededSpace = desiredGap * (group.length - 1);
+    // Graceful degradation: if band is too narrow, reduce the gap
+    const effectiveGap = neededSpace > bandRange
+      ? bandRange / (group.length - 1)
+      : desiredGap;
 
-      // Check Y overlap
-      const yOverlapTop = Math.max(a.yTop, b.yTop);
-      const yOverlapBottom = Math.min(a.yBottom, b.yBottom);
-      if (yOverlapTop >= yOverlapBottom) continue;
+    // Center the spread within the band
+    const totalSpread = effectiveGap * (group.length - 1);
+    const startY = bandTop + (bandRange - totalSpread) / 2;
 
-      const overlapLength = yOverlapBottom - yOverlapTop;
-      if (overlapLength < verticalGap) continue;
+    for (let i = 0; i < group.length; i++) {
+      const edge = group[i];
+      const coords = edgeCoords.get(edge.id);
+      if (!coords) continue;
 
-      // Nudge edge b's midY to reduce the overlap
-      const bCoords = edgeCoords.get(b.edgeId);
-      const bMidY = edgeMidY.get(b.edgeId);
-      if (!bCoords || bMidY === undefined) continue;
-
-      let newMidY: number;
-      if (b.isSource) {
-        newMidY = bMidY - verticalGap;
-      } else {
-        newMidY = bMidY + verticalGap;
-      }
-
+      const newMidY = startY + i * effectiveGap;
+      // Clamp to this edge's own valid range
       const clamped = Math.max(
-        bCoords.sy + minBendDistance,
-        Math.min(bCoords.ty - minBendDistance, newMidY)
+        coords.sy + minBendDistance,
+        Math.min(coords.ty - minBendDistance, newMidY)
       );
+      edgeMidY.set(edge.id, clamped);
+      adjusted.add(edge.id);
+    }
+  }
 
-      if (Math.abs(clamped - bMidY) > 1) {
-        edgeMidY.set(b.edgeId, clamped);
-        if (b.isSource) {
-          b.yBottom = Math.max(bCoords.sy, clamped);
-        } else {
-          b.yTop = Math.min(clamped, bCoords.ty);
-        }
+  // Process target groups first (fan-in is more visually prominent)
+  const byTarget = new Map<string, Edge[]>();
+  for (const edge of edges) {
+    const group = byTarget.get(edge.target) ?? [];
+    group.push(edge);
+    byTarget.set(edge.target, group);
+  }
+  for (const [, group] of byTarget) {
+    spreadGroup(group, 'sx');
+  }
+
+  // Process source groups (fan-out), skip edges already adjusted by target groups
+  const bySource = new Map<string, Edge[]>();
+  for (const edge of edges) {
+    const group = bySource.get(edge.source) ?? [];
+    group.push(edge);
+    bySource.set(edge.source, group);
+  }
+  for (const [, group] of bySource) {
+    // Only spread edges that weren't already adjusted, unless this group is
+    // larger (more visually impactful fan-out)
+    const unadjusted = group.filter(e => !adjusted.has(e.id));
+    if (unadjusted.length >= 2) {
+      spreadGroup(unadjusted, 'tx');
+    } else if (group.length >= 2) {
+      // All edges were adjusted by target groups — only re-spread if
+      // this source group is large enough to warrant it
+      if (group.length > 3) {
+        spreadGroup(group, 'tx');
       }
     }
   }
@@ -638,21 +655,23 @@ export const computeEdgeRouting: EdgeRouter = function computeEdgeRouting(
     }
   }
 
-  // ── Phase 1: Node avoidance ─────────────────────────────────────
+  // ── Phase 1: Common-endpoint midY spreading ─────────────────────
+  // Edges sharing a target (fan-in) or source (fan-out) get staggered
+  // midY values so they take visually distinct paths.
+  spreadCommonEndpointMidY(edgeMidY, edgeCoords, edges, minBendDistance, segmentGap);
+
+  // ── Phase 2: Node avoidance ─────────────────────────────────────
   if (shouldAvoidNodes) {
     avoidNodes(edgeMidY, edgeCoords, nodeBoundsMap, edges, minBendDistance, nodePadding);
   }
 
-  // ── Phase 2: Horizontal-vs-vertical crossing resolution ────────
+  // ── Phase 3: Horizontal-vs-vertical crossing resolution ────────
   resolveHVCrossings(edgeMidY, edgeCoords, edges, minBendDistance, 10);
 
-  // ── Phase 3: Cross-rank horizontal segment deconfliction ────────
+  // ── Phase 4: Cross-rank horizontal segment deconfliction ────────
   resolveHorizontalOverlaps(edgeMidY, edgeCoords, edges, minBendDistance, segmentGap);
 
-  // ── Phase 4: Vertical segment proximity detection ──────────────
-  resolveVerticalProximity(edgeMidY, edgeCoords, edges, minBendDistance, 12);
-
-  // ── Phase 5: Final horizontal cleanup after vertical nudging ───
+  // ── Phase 5: Final horizontal cleanup ──────────────────────────
   resolveHorizontalOverlaps(edgeMidY, edgeCoords, edges, minBendDistance, segmentGap);
 
   // ── Edge segments for label collision avoidance ────────────────────
