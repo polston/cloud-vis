@@ -62,9 +62,16 @@ export function useGraphNavigation() {
     };
     return {
       nodes: layouted.nodes,
-      edges: layouted.edges.map(applyEdgeStyle) as CloudEdge[],
+      edges: layouted.edges.map(applyEdgeStyle).map((edge) => ({
+        ...edge,
+        className: selectedNodeId
+          ? edge.source === selectedNodeId || edge.target === selectedNodeId
+            ? 'edge-highlighted'
+            : 'edge-dimmed'
+          : undefined,
+      })) as CloudEdge[],
     };
-  }, [currentLevel, viewMode]);
+  }, [currentLevel, viewMode, selectedNodeId]);
 
   // Zone mode: flattened graph with nested zones
   const zoneData = useMemo(() => {
@@ -107,12 +114,21 @@ export function useGraphNavigation() {
       return styled;
     });
 
+    const classifiedEdges = styledEdges.map((edge) => ({
+      ...edge,
+      className: selectedNodeId
+        ? edge.source === selectedNodeId || edge.target === selectedNodeId
+          ? 'edge-highlighted'
+          : 'edge-dimmed'
+        : undefined,
+    }));
+
     return {
       nodes: nodesWithLocks,
-      edges: styledEdges,
+      edges: classifiedEdges,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, zoneDepth, collapsedZones, zonesLocked, nodesLocked, positionResetVersion]);
+  }, [viewMode, zoneDepth, collapsedZones, zonesLocked, nodesLocked, positionResetVersion, selectedNodeId]);
 
   const nodes = viewMode === 'zone' ? zoneData.nodes : explorerData.nodes;
   const edges = viewMode === 'zone' ? zoneData.edges : explorerData.edges;
