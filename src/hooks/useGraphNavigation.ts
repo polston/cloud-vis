@@ -51,8 +51,8 @@ export function useGraphNavigation() {
 
   const breadcrumb = useMemo(() => buildBreadcrumb(currentLevel), [currentLevel]);
 
-  // Explorer mode: original drill-down layout
-  const explorerData = useMemo(() => {
+  // Explorer mode: original drill-down layout (nodes + base edges, no selection styling)
+  const explorerLayout = useMemo(() => {
     if (viewMode !== 'explorer') return { nodes: [] as CloudNode[], edges: [] as CloudEdge[] };
     const level = graphRegistry[currentLevel];
     if (!level) return { nodes: [] as CloudNode[], edges: [] as CloudEdge[] };
@@ -62,19 +62,24 @@ export function useGraphNavigation() {
     };
     return {
       nodes: layouted.nodes,
-      edges: layouted.edges.map(applyEdgeStyle).map((edge) => ({
-        ...edge,
-        className: selectedNodeId
-          ? edge.source === selectedNodeId || edge.target === selectedNodeId
-            ? 'edge-highlighted'
-            : 'edge-dimmed'
-          : undefined,
-      })) as CloudEdge[],
+      edges: layouted.edges.map(applyEdgeStyle) as CloudEdge[],
     };
-  }, [currentLevel, viewMode, selectedNodeId]);
+  }, [currentLevel, viewMode]);
 
-  // Zone mode: flattened graph with nested zones
-  const zoneData = useMemo(() => {
+  // Apply selection-dependent edge highlighting separately so node refs stay stable
+  const explorerEdges = useMemo(() => {
+    return explorerLayout.edges.map((edge) => ({
+      ...edge,
+      className: selectedNodeId
+        ? edge.source === selectedNodeId || edge.target === selectedNodeId
+          ? 'edge-highlighted'
+          : 'edge-dimmed'
+        : undefined,
+    })) as CloudEdge[];
+  }, [explorerLayout.edges, selectedNodeId]);
+
+  // Zone mode: flattened graph with nested zones (layout + base edges, no selection styling)
+  const zoneLayout = useMemo(() => {
     if (viewMode !== 'zone') return { nodes: [] as Node[], edges: [] as Edge[] };
     const { nodes: flatNodes, edges: flatEdges } = flattenGraph(zoneDepth, collapsedZones);
     const layouted = getZoneLayoutedElements(flatNodes, flatEdges);
@@ -114,7 +119,16 @@ export function useGraphNavigation() {
       return styled;
     });
 
-    const classifiedEdges = styledEdges.map((edge) => ({
+    return {
+      nodes: nodesWithLocks,
+      edges: styledEdges,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, zoneDepth, collapsedZones, zonesLocked, nodesLocked, positionResetVersion]);
+
+  // Apply selection-dependent edge highlighting separately so node refs stay stable
+  const zoneEdges = useMemo(() => {
+    return zoneLayout.edges.map((edge) => ({
       ...edge,
       className: selectedNodeId
         ? edge.source === selectedNodeId || edge.target === selectedNodeId
@@ -122,16 +136,10 @@ export function useGraphNavigation() {
           : 'edge-dimmed'
         : undefined,
     }));
+  }, [zoneLayout.edges, selectedNodeId]);
 
-    return {
-      nodes: nodesWithLocks,
-      edges: classifiedEdges,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, zoneDepth, collapsedZones, zonesLocked, nodesLocked, positionResetVersion, selectedNodeId]);
-
-  const nodes = viewMode === 'zone' ? zoneData.nodes : explorerData.nodes;
-  const edges = viewMode === 'zone' ? zoneData.edges : explorerData.edges;
+  const nodes = viewMode === 'zone' ? zoneLayout.nodes : explorerLayout.nodes;
+  const edges = viewMode === 'zone' ? zoneEdges : explorerEdges;
 
   const currentLevelData = graphRegistry[currentLevel];
 

@@ -383,9 +383,7 @@ body {
   border-color: var(--node-color);
   box-shadow:
     0 0 0 1px var(--node-color-dim),
-    0 0 20px var(--node-color-dim),
-    0 4px 12px rgba(0, 0, 0, 0.3);
-  transform: translateY(-1px);
+    0 0 8px var(--node-color-dim);
 }
 
 .node-content {
