@@ -34,22 +34,6 @@ function buildBreadcrumb(nodeId: string): BreadcrumbItem[] {
 
 export type ViewMode = 'zone' | 'explorer';
 
-/** Inject user midY overrides into edge data */
-function applyEdgeOverrides(
-  edges: Edge[],
-  overrides: Map<string, number>
-): Edge[] {
-  if (overrides.size === 0) return edges;
-  return edges.map((edge) => {
-    const userMidY = overrides.get(edge.id);
-    if (userMidY === undefined) return edge;
-    return {
-      ...edge,
-      data: { ...edge.data, userMidY },
-    };
-  });
-}
-
 export function useGraphNavigation() {
   const [viewMode, setViewMode] = useState<ViewMode>('zone');
   const [currentLevel, setCurrentLevel] = useState('root');
@@ -65,11 +49,6 @@ export function useGraphNavigation() {
   const nodePositionOverridesRef = useRef(new Map<string, { x: number; y: number }>());
   const [positionResetVersion, setPositionResetVersion] = useState(0);
 
-  // User-dragged edge midY overrides, persisted across navigation
-  const edgeOverridesRef = useRef(new Map<string, number>());
-  // Use a counter to trigger re-render when overrides change
-  const [overrideVersion, setOverrideVersion] = useState(0);
-
   const breadcrumb = useMemo(() => buildBreadcrumb(currentLevel), [currentLevel]);
 
   // Explorer mode: original drill-down layout
@@ -83,13 +62,9 @@ export function useGraphNavigation() {
     };
     return {
       nodes: layouted.nodes,
-      edges: applyEdgeOverrides(
-        layouted.edges.map(applyEdgeStyle),
-        edgeOverridesRef.current
-      ) as CloudEdge[],
+      edges: layouted.edges.map(applyEdgeStyle) as CloudEdge[],
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentLevel, viewMode, overrideVersion]);
+  }, [currentLevel, viewMode]);
 
   // Zone mode: flattened graph with nested zones
   const zoneData = useMemo(() => {
@@ -134,10 +109,10 @@ export function useGraphNavigation() {
 
     return {
       nodes: nodesWithLocks,
-      edges: applyEdgeOverrides(styledEdges, edgeOverridesRef.current),
+      edges: styledEdges,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, zoneDepth, collapsedZones, overrideVersion, zonesLocked, nodesLocked, positionResetVersion]);
+  }, [viewMode, zoneDepth, collapsedZones, zonesLocked, nodesLocked, positionResetVersion]);
 
   const nodes = viewMode === 'zone' ? zoneData.nodes : explorerData.nodes;
   const edges = viewMode === 'zone' ? zoneData.edges : explorerData.edges;
@@ -170,16 +145,6 @@ export function useGraphNavigation() {
   const toggleViewMode = useCallback(() => {
     setViewMode((prev) => (prev === 'zone' ? 'explorer' : 'zone'));
     setSelectedNodeId(null);
-  }, []);
-
-  /** Set or clear a user-dragged midY override for an edge */
-  const updateEdgeMidY = useCallback((edgeId: string, midY: number | null) => {
-    if (midY === null) {
-      edgeOverridesRef.current.delete(edgeId);
-    } else {
-      edgeOverridesRef.current.set(edgeId, midY);
-    }
-    setOverrideVersion((v) => v + 1);
   }, []);
 
   const toggleZonesLocked = useCallback(() => {
@@ -221,7 +186,6 @@ export function useGraphNavigation() {
     toggleZoneCollapse,
     toggleViewMode,
     setZoneDepth,
-    updateEdgeMidY,
     toggleZonesLocked,
     toggleNodesLocked,
     updateNodePosition,

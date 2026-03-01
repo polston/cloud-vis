@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { ChevronRight } from 'lucide-react';
 import type { CloudNodeData } from '../types';
-import type { HandleInfo } from '../utils/layout';
+import type { HandleInfo } from '../utils/edge-routing';
 import { getIcon } from '../utils/icons';
 
 function CloudGroupNode({ data }: NodeProps) {

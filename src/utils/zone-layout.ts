@@ -272,7 +272,7 @@ export function getZoneLayoutedElements(
   // Only route intra-zone edges (edges where both endpoints are leaf nodes)
   const routableEdges = edges.filter(e => absoluteBoundsMap.has(e.source) && absoluteBoundsMap.has(e.target));
 
-  const routing = computeEdgeRouting(routableEdges, absoluteBoundsMap);
+  const routing = computeEdgeRouting(routableEdges, absoluteBoundsMap, { avoidNodes: true });
 
   // Inject handle data into leaf nodes
   for (const node of layoutedNodes) {
@@ -293,6 +293,7 @@ export function getZoneLayoutedElements(
       data: {
         ...edge.data,
         midY: assignment.midY,
+        relativeMidY: assignment.relativeMidY,
         ...(assignment.labelOffset !== undefined ? { labelOffset: assignment.labelOffset } : {}),
       },
     };

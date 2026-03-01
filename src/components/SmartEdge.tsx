@@ -59,8 +59,11 @@ export default function SmartEdge({
   markerEnd,
 }: EdgeProps) {
   const edgeData = data as Record<string, unknown> | undefined;
-  const layoutMidY = edgeData?.midY as number | undefined;
-  const userMidY = edgeData?.userMidY as number | undefined;
+
+  // Layout-computed ratio (0–1 between sourceY and targetY)
+  const layoutRelativeMidY = edgeData?.relativeMidY as number | undefined;
+  // User-dragged ratio (persisted via setEdges)
+  const userRelativeMidY = edgeData?.userRelativeMidY as number | undefined;
   const labelOffset = edgeData?.labelOffset as number | undefined;
 
   const [dragMidY, setDragMidY] = useState<number | null>(null);
@@ -68,6 +71,16 @@ export default function SmartEdge({
   const dragStartRef = useRef<{ startY: number; startMidY: number } | null>(null);
   const activePointersRef = useRef<Set<number>>(new Set());
   const { setEdges } = useReactFlow();
+
+  // Convert relative ratios to absolute Y using current endpoint positions.
+  // This ensures the horizontal segment moves when endpoints move (e.g. zone drag).
+  const span = targetY - sourceY;
+  const layoutMidY = layoutRelativeMidY !== undefined
+    ? sourceY + layoutRelativeMidY * span
+    : undefined;
+  const userMidY = userRelativeMidY !== undefined
+    ? sourceY + userRelativeMidY * span
+    : undefined;
 
   // Priority: drag in progress > user override > layout-computed
   const effectiveMidY = dragMidY ?? userMidY ?? layoutMidY;
@@ -155,15 +168,17 @@ export default function SmartEdge({
     setIsDragging(false);
     setDragMidY(null);
 
-    // Commit to edge data
+    // Store as relative ratio so it adapts when endpoints move
+    const finalRelative = span !== 0 ? (finalMidY - sourceY) / span : 0.5;
+
     setEdges((eds) =>
       eds.map((edge) =>
         edge.id === id
-          ? { ...edge, data: { ...edge.data, userMidY: finalMidY } }
+          ? { ...edge, data: { ...edge.data, userRelativeMidY: finalRelative } }
           : edge
       )
     );
-  }, [id, setEdges]);
+  }, [id, setEdges, sourceY, span]);
 
   const onPointerCancel = useCallback((e: React.PointerEvent) => {
     activePointersRef.current.delete(e.pointerId);
@@ -180,7 +195,8 @@ export default function SmartEdge({
     setEdges((eds) =>
       eds.map((edge) => {
         if (edge.id !== id) return edge;
-        const { userMidY: _, ...restData } = (edge.data ?? {}) as Record<string, unknown>;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { userRelativeMidY: _discarded, ...restData } = (edge.data ?? {}) as Record<string, unknown>;
         return { ...edge, data: restData };
       })
     );
