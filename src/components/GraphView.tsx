@@ -25,7 +25,7 @@ import DepthControl from './DepthControl';
 import EdgeLegend from './EdgeLegend';
 import { useGraphNavigation, MAX_HIERARCHY_DEPTH } from '../hooks/useGraphNavigation';
 import { graphRegistry } from '../data/graph-data';
-import type { CloudNodeData, ZoneNodeData } from '../types';
+import type { CloudNodeData, CloudProvider, ZoneNodeData } from '../types';
 
 const nodeTypes = {
   cloudService: CloudServiceNode,
@@ -137,10 +137,26 @@ export default function GraphView() {
     return () => clearTimeout(timeoutId);
   }, [layoutedNodes, fitView]);
 
-  const selectedNodeData = useMemo(() => {
+  const selectedNodeData = useMemo((): CloudNodeData | null => {
     if (!selectedNodeId) return null;
     const node = nodes.find((n) => n.id === selectedNodeId);
     if (!node) return null;
+    if (node.type === 'zoneContainer') {
+      // Convert ZoneNodeData to CloudNodeData so InfoPanel can display it
+      const z = node.data as unknown as ZoneNodeData;
+      return {
+        label: z.label,
+        description: z.description,
+        provider: z.provider as CloudProvider,
+        category: z.category,
+        icon: z.icon,
+        color: z.color,
+        isGroup: true,
+        isExpanded: true,
+        hasChildren: true,
+        depth: z.zoneLevel,
+      };
+    }
     return (node.data as unknown as CloudNodeData) ?? null;
   }, [selectedNodeId, nodes]);
 
@@ -164,9 +180,7 @@ export default function GraphView() {
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
-      if (node.type !== 'zoneContainer') {
-        selectNode(node.id);
-      }
+      selectNode(node.id);
     },
     [selectNode]
   );
