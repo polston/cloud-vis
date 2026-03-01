@@ -30,3 +30,7 @@ Push to `main` — the GitHub Actions workflow will build and deploy automatical
 - React Flow ([@xyflow/react](https://reactflow.dev))
 - Dagre (auto-layout)
 - Lucide React (icons)
+
+---
+
+*This project was built from my phone, just for fun.*
