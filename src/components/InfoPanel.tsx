@@ -2,6 +2,7 @@ import { X, ExternalLink } from 'lucide-react';
 import type { CloudNodeData } from '../types';
 import { getIcon } from '../utils/icons';
 import { providers } from '../data/providers';
+import { docLinks } from '../data/doc-links';
 
 interface InfoPanelProps {
   nodeData: CloudNodeData | null;
@@ -15,6 +16,7 @@ export default function InfoPanel({ nodeData, nodeId, onClose, onDrillDown, show
   if (!nodeData || !nodeId) return null;
 
   const provider = providers[nodeData.provider];
+  const docUrl = docLinks[nodeId];
 
   return (
     <div className="info-panel">
@@ -44,6 +46,17 @@ export default function InfoPanel({ nodeData, nodeId, onClose, onDrillDown, show
             {nodeData.category}
           </span>
         </div>
+        {docUrl && (
+          <a
+            className="info-panel-doc-link"
+            href={docUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLink size={14} />
+            View documentation
+          </a>
+        )}
         {showDrillDown && nodeData.hasChildren && (
           <button
             className="info-panel-drill-btn"

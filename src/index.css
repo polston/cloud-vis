@@ -421,11 +421,36 @@ body {
   text-transform: capitalize;
 }
 
-.info-panel-drill-btn {
+.info-panel-doc-link {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-top: 16px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.info-panel-doc-link:hover {
+  background: var(--bg-card);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.info-panel-drill-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
   width: 100%;
   padding: 10px 14px;
   background: var(--bg-tertiary);
