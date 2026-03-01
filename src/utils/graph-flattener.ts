@@ -22,6 +22,22 @@ function buildParentMapFromRegistry(): Record<string, string> {
 
 export const parentMap = buildParentMapFromRegistry();
 
+/**
+ * Maps every node ID to the registry key of the level that contains it.
+ * Unlike `parentMap`, this includes leaf nodes that have no registry entry.
+ */
+function buildFullParentMapFromRegistry(): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [registryKey, level] of Object.entries(graphRegistry)) {
+    for (const node of level.nodes) {
+      map[node.id] = registryKey;
+    }
+  }
+  return map;
+}
+
+export const fullParentMap = buildFullParentMapFromRegistry();
+
 export interface FlattenedGraph {
   nodes: Node[];
   edges: Edge[];

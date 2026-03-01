@@ -23,7 +23,9 @@ import Breadcrumb from './Breadcrumb';
 import InfoPanel from './InfoPanel';
 import DepthControl from './DepthControl';
 import EdgeLegend from './EdgeLegend';
+import SearchDropdown from './SearchDropdown';
 import { useGraphNavigation, MAX_HIERARCHY_DEPTH } from '../hooks/useGraphNavigation';
+import type { SearchIndexEntry } from '../utils/search-index';
 import { graphRegistry } from '../data/graph-data';
 import type { CloudNodeData, CloudProvider, ZoneNodeData } from '../types';
 
@@ -59,6 +61,7 @@ export default function GraphView() {
     toggleNodesLocked,
     updateNodePosition,
     resetPositions,
+    navigateToNode,
   } = useGraphNavigation();
 
   const { fitView } = useReactFlow();
@@ -196,6 +199,19 @@ export default function GraphView() {
     [updateNodePosition]
   );
 
+  const onSearchSelect = useCallback(
+    (entry: SearchIndexEntry) => {
+      const nodeId = navigateToNode(entry.nodeId, entry.parentKey);
+      // In zone mode, zoom to the selected node after layout settles
+      if (viewMode === 'zone') {
+        setTimeout(() => {
+          fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.5 });
+        }, 100);
+      }
+    },
+    [navigateToNode, viewMode, fitView]
+  );
+
   const isZoneMode = viewMode === 'zone';
 
   return (
@@ -219,6 +235,7 @@ export default function GraphView() {
             </>
           )}
         </div>
+        <SearchDropdown onSelect={onSearchSelect} />
       </div>
 
       <div className="graph-toolbar">

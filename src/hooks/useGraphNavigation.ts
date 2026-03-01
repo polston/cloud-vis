@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { type Node, type Edge } from '@xyflow/react';
 import { graphRegistry } from '../data/graph-data';
 import { getLayoutedElements } from '../utils/layout';
-import { flattenGraph, buildNodeParentMap, isCrossZoneEdge, parentMap } from '../utils/graph-flattener';
+import { flattenGraph, buildNodeParentMap, isCrossZoneEdge, parentMap, fullParentMap } from '../utils/graph-flattener';
 import { getZoneLayoutedElements } from '../utils/zone-layout';
 import { applyEdgeStyle } from '../utils/edge-styles';
 import type { BreadcrumbItem, CloudNode, CloudEdge } from '../types';
@@ -168,6 +168,34 @@ export function useGraphNavigation() {
 
   const hasPositionOverrides = nodePositionOverridesRef.current.size > 0;
 
+  /** Navigate to a node from search — handles both explorer and zone modes. */
+  const navigateToNode = useCallback(
+    (nodeId: string, nodeParentKey: string) => {
+      if (viewMode === 'explorer') {
+        // Navigate to the level containing this node, then select it
+        setCurrentLevel(nodeParentKey);
+        setSelectedNodeId(null);
+        // Select after layout settles
+        setTimeout(() => setSelectedNodeId(nodeId), 60);
+      } else {
+        // Zone mode: uncollapse all ancestors so the node becomes visible
+        setCollapsedZones((prev) => {
+          const next = new Set(prev);
+          // Walk up the parent chain and remove any collapsed ancestors
+          let current: string | undefined = nodeParentKey;
+          while (current && current !== 'root') {
+            next.delete(current);
+            current = fullParentMap[current];
+          }
+          return next;
+        });
+        setSelectedNodeId(nodeId);
+      }
+      return nodeId;
+    },
+    [viewMode]
+  );
+
   return {
     viewMode,
     currentLevel,
@@ -190,5 +218,6 @@ export function useGraphNavigation() {
     toggleNodesLocked,
     updateNodePosition,
     resetPositions,
+    navigateToNode,
   };
 }
